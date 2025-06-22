@@ -81,10 +81,16 @@ class Blip2T5InstructQformerLLMLoRA(Blip2Base):
             self.visual_encoder = self.visual_encoder.eval()
             self.visual_encoder.train = disabled_train
             logging.info("freeze vision encoder")
-
-        self.Qformer, self.query_tokens = self.init_Qformer(
-            num_query_token, self.visual_encoder.num_features
-        )
+            
+        if self.visual_encoder.num_features !=1408:
+            self.projector = nn.Linear(self.visual_encoder.num_features, 1408)
+            self.Qformer, self.query_tokens = self.init_Qformer(
+                num_query_token, 1408
+            )
+        else:
+            self.Qformer, self.query_tokens = self.init_Qformer(
+                num_query_token, self.visual_encoder.num_features
+            )
 
         if not qformer_text_input:
             self.Qformer.bert.embeddings.word_embeddings = None
@@ -115,7 +121,7 @@ class Blip2T5InstructQformerLLMLoRA(Blip2Base):
 
         for name, param in self.t5_model.named_parameters():
             param.requires_grad = False 
-            param.data = param.data.bfloat16()
+            param.data = param.data.float()
         
         def _find_all_linear_names(model):
             cls = torch.nn.Linear
@@ -176,10 +182,17 @@ class Blip2T5InstructQformerLLMLoRA(Blip2Base):
         # print(samples["text_input"])
         # print(samples["text_output"])
         # print('-----------------')
-
         image = samples["image"]
+        if self.visual_encoder.num_features != 1408:
+            with self.maybe_autocast():  # Ensure correct precision
+                image_feature = self.projector(self.visual_encoder(image))
+        else:
+            with self.maybe_autocast():  # Ensure correct precision
+                image_feature = self.visual_encoder(image)
         with self.maybe_autocast():
-            image_embeds = self.ln_vision(self.visual_encoder(image))
+            image_embeds = self.ln_vision(image_feature)
+        image_embeds = image_embeds.float()
+
         image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
@@ -380,41 +393,49 @@ class Blip2T5InstructQformerLLMLoRA(Blip2Base):
             query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
             Qformer_atts = torch.cat([query_atts,text_Qformer.attention_mask],dim=1)
 
-        # For video data
-        if image.dim() == 5:
-            inputs_t5, atts_t5 = [], []
-            for j in range(image.size(2)):
-                this_frame = image[:,:,j,:,:]
-                with self.maybe_autocast():
-                    frame_embeds = self.ln_vision(self.visual_encoder(this_frame))
-                    frame_atts = torch.ones(frame_embeds.size()[:-1], dtype=torch.long).to(image.device)
+            # # For video data
+            # if image.dim() == 5:
+            #     inputs_t5, atts_t5 = [], []
+            #     for j in range(image.size(2)):
+            #         this_frame = image[:,:,j,:,:]
+            #         with self.maybe_autocast():
+            #             frame_embeds = self.ln_vision(self.visual_encoder(this_frame))
+            #             frame_atts = torch.ones(frame_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
-                if self.qformer_text_input:
-                    frame_query_output = self.Qformer.bert(
-                        text_Qformer.input_ids,
-                        attention_mask = Qformer_atts,
-                        query_embeds=query_tokens,
-                        encoder_hidden_states=frame_embeds,
-                        encoder_attention_mask=frame_atts,
-                        return_dict=True,
-                    )
-                else:
-                    frame_query_output = self.Qformer.bert(
-                        query_embeds=query_tokens,
-                        encoder_hidden_states=frame_embeds,
-                        encoder_attention_mask=frame_atts,
-                        return_dict=True,
-                    )
+            #         if self.qformer_text_input:
+            #             frame_query_output = self.Qformer.bert(
+            #                 text_Qformer.input_ids,
+            #                 attention_mask = Qformer_atts,
+            #                 query_embeds=query_tokens,
+            #                 encoder_hidden_states=frame_embeds,
+            #                 encoder_attention_mask=frame_atts,
+            #                 return_dict=True,
+            #             )
+            #         else:
+            #             frame_query_output = self.Qformer.bert(
+            #                 query_embeds=query_tokens,
+            #                 encoder_hidden_states=frame_embeds,
+            #                 encoder_attention_mask=frame_atts,
+            #                 return_dict=True,
+            #             )
 
-                frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:,:query_tokens.size(1),:])
-                frame_atts_t5 = torch.ones(frame_inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
-                inputs_t5.append(frame_inputs_t5)
-                atts_t5.append(frame_atts_t5)
-            inputs_t5 = torch.cat(inputs_t5, dim=1)
-            atts_t5 = torch.cat(atts_t5, dim=1)
-        else:
+            #         frame_inputs_t5 = self.t5_proj(frame_query_output.last_hidden_state[:,:query_tokens.size(1),:])
+            #         frame_atts_t5 = torch.ones(frame_inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
+            #         inputs_t5.append(frame_inputs_t5)
+            #         atts_t5.append(frame_atts_t5)
+            #     inputs_t5 = torch.cat(inputs_t5, dim=1)
+            #     atts_t5 = torch.cat(atts_t5, dim=1)
+            # else:
+            if self.visual_encoder.num_features != 1408:
+                with self.maybe_autocast():  # Ensure correct precision
+                    image_feature = self.projector(self.visual_encoder(image))
+            else:
+                with self.maybe_autocast():  # Ensure correct precision
+                    image_feature = self.visual_encoder(image)
             with self.maybe_autocast():
-                image_embeds = self.ln_vision(self.visual_encoder(image))
+                image_embeds = self.ln_vision(image_feature)
+            image_embeds = image_embeds.float() 
+
             image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
 
             if self.qformer_text_input:

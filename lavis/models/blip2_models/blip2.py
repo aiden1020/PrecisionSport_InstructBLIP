@@ -23,6 +23,7 @@ from lavis.models.base_model import BaseModel
 from lavis.models.blip2_models.Qformer import BertConfig, BertLMHeadModel
 from lavis.models.eva_vit import create_eva_vit_g
 from lavis.models.clip_vit import create_clip_vit_L
+from lavis.models.tc_clip_vit import load_tc_clip_model
 from transformers import BertTokenizer
 
 
@@ -67,6 +68,7 @@ class Blip2Base(BaseModel):
             "eva_clip_g",
             "eva2_clip_L",
             "clip_L",
+            "tc_clip",
         ], "vit model must be eva_clip_g, eva2_clip_L or clip_L"
         if model_name == "eva_clip_g":
             visual_encoder = create_eva_vit_g(
@@ -78,7 +80,12 @@ class Blip2Base(BaseModel):
 #             )
         elif model_name == "clip_L":
             visual_encoder = create_clip_vit_L(img_size, use_grad_checkpoint, precision)
-        ln_vision = LayerNorm(visual_encoder.num_features)
+        elif model_name == "tc_clip":
+            visual_encoder = load_tc_clip_model()
+        if visual_encoder.num_features != 1408:
+            ln_vision = LayerNorm(1408)
+        else:
+            ln_vision = LayerNorm(visual_encoder.num_features)
         self.vit_name = model_name
         return visual_encoder, ln_vision
 
