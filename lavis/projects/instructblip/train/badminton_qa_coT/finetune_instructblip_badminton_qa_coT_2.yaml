@@ -4,30 +4,34 @@
 # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 
 model:
-  arch: blip2_t5_instruct_qformer_lora
+  arch: blip2_t5_instruct_video_qformer_llm_lora
   model_type: flant5xl
+  vit_model: tc_clip
   load_pretrained: True #pretrain from scratch
   freeze_vit: True
+  pretrained: "output/results/badminton/badminton_3/best_weight/checkpoint_best.pth"
+  llm_lora_r: 4
+  llm_lora_apply: all
   lora_r: 4
   lora_alpha: 8
   lora_dropout: 0
   self_attention_qv_lora: False
   self_attention_output_lora: False
-  ffn_lora: True
-  qformer_crossattention_lora_q: False
-  qformer_crossattention_lora_k: False
-  qformer_crossattention_lora_v: False
-  qformer_crossattention_lora_o: False
+  ffn_lora: False
+  qformer_crossattention_lora_q: True
+  qformer_crossattention_lora_k: True
+  qformer_crossattention_lora_v: True
+  qformer_crossattention_lora_o: True
 
 datasets:
-  scienceqa:
+  badminton_qa:
     train_samples_portion: all
     vis_processor:
       train:
-        name: "blip2_image_train"
+        name: "tc_clip_image_eval"
         image_size: 224
       eval:
-        name: "blip_image_eval"
+        name: "tc_clip_image_eval"
         image_size: 224
     text_processor:
       train:
@@ -36,26 +40,29 @@ datasets:
         name: "instruct_blip_question"
 
 run:
-  task: scienceqa
+  task: badminton_qa
   # optimizer
-  lr_sched: "linear_decay_lr"
-  init_lr: 5e-4
+  lr_sched: "linear_warmup_cosine_lr"
+  init_lr:  5e-5
   min_lr: 0
-  warmup_lr: 5e-4
-  warmup_steps: 0
-
+  warmup_lr: 1e-8
+  warmup_steps: 1000
+  #total_batch: 16
   weight_decay: 0.05
-  max_epoch: 15
-  batch_size_train: 16
-  accum_grad_iters: 1
-  batch_size_eval: 1
+  max_epoch: 20
+  batch_size_train: 4
+  accum_grad_iters: 4
+  batch_size_eval: 2
   num_workers: 4
-
+  disable_early_stopping: True
+  max_len: 30
+  min_len: 10
+  num_beams: 5
   # inference-specific
   inference_method: "rank"
 
   seed: 42
-  output_dir: "output/results/scienceqa/scienceqa_15"
+  output_dir: "output/results/badminton_qa/badminton_qa_coT_2"
 
   amp: True
   resume_ckpt_path: null

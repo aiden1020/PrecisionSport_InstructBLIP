@@ -1,0 +1,49 @@
+# Copyright (c) 2022, salesforce.com, inc.
+# All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+# For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+
+model:
+  arch: blip2_t5_instruct_qformer_lora
+  model_type: flant5xl
+  vit_model: tc_clip
+  load_pretrained: True #pretrain from scratch
+  pretrained: "output/results/badminton/badminton_3/best_weight/checkpoint_best.pth"
+  # prompt: "<video> a short video description"
+
+datasets:
+  badminton_caption:
+    train_samples_portion: all
+    vis_processor:
+      eval:
+        name: "tc_clip_image_eval"
+        image_size: 224
+    text_processor:
+      eval:
+        name: "blip_caption"
+
+run:
+  task: badminton_caption
+
+  #total_batch: 16
+  batch_size_train: 16
+  batch_size_eval: 16
+  num_workers: 4
+
+  max_len: 30
+  min_len: 10
+  num_beams: 5
+  # inference-specific
+  inference_method: "rank"
+
+  seed: 42
+  output_dir: "output/results/eval/"
+
+  amp: True
+
+  evaluate: True
+  test_splits: ["test"]
+  device: "cuda"
+  world_size: 1
+  dist_url: "env://"
+  distributed: True
