@@ -21,6 +21,10 @@ from lavis.datasets.datasets.flickr_datasets import (
     FlickrDataset,
     FlickrEvalDataset,
 )
+from lavis.datasets.datasets.badminton_caption_dataset import (
+    BadmintonCaptionDataset,
+    BadmintonCaptionEvalDataset,
+)
 
 @registry.register_builder("coco_caption")
 class COCOCapBuilder(BaseDatasetBuilder):
@@ -78,4 +82,12 @@ class FlickrBuilder(BaseDatasetBuilder):
 
     DATASET_CONFIG_DICT = {
         "default": "configs/datasets/flickr30k_instruct/defaults.yaml",
+    }
+@registry.register_builder("badminton_caption")
+class BadmintonCapBuilder(BaseDatasetBuilder):
+    train_dataset_cls = BadmintonCaptionDataset
+    eval_dataset_cls = BadmintonCaptionEvalDataset
+
+    DATASET_CONFIG_DICT = {
+        "default": "configs/datasets/badminton_caption/defaults.yaml",
     }

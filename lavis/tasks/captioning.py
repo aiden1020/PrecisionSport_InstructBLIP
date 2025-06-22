@@ -151,6 +151,56 @@ class Flickr30kCaptionTask(CaptionTask):
 
         return coco_res
 
+@registry.register_task("badminton_caption")
+class BadmintonCaptionTask(CaptionTask):
+    def valid_step(self, model, samples):
+        results = []
+        captions = model.generate(
+            samples,
+            use_nucleus_sampling=False,
+            num_beams=self.num_beams,
+            max_length=self.max_len,
+            min_length=self.min_len,
+        )
+
+        img_ids = samples["image_id"]
+        for caption, img_id in zip(captions, img_ids):
+            results.append({"caption": caption, "image_id": img_id})
+        return results
+
+    def after_evaluation(self, val_result, split_name, epoch, **kwargs):
+        eval_result_file = self.save_result(
+            val_result,
+            result_dir=registry.get_path("result_dir"),
+            filename=f"{split_name}_badminton_caption_result_epoch{epoch}",
+            remove_duplicate="",
+        )
+        if split_name == "val":
+            metrics = self._report_metrics(
+                eval_result_file=eval_result_file, split_name=split_name
+            )
+        else:
+            metrics = None
+        # metrics = None
+
+        return metrics
+
+    @main_process
+    def _report_metrics(self, eval_result_file, split_name):
+        badminton_eval = badminton_caption_eval(eval_result_file, split_name)
+
+        agg_metrics = badminton_eval.eval["CIDEr"] + badminton_eval.eval["SPICE"]
+        log_stats = {split_name: {k: v for k, v in badminton_eval.eval.items()}}
+
+        with open(
+            os.path.join(registry.get_path("output_dir"), "evaluate.txt"), "a"
+        ) as f:
+            f.write(json.dumps(log_stats) + "\n")
+
+        badminton_res = {k: v for k, v in badminton_eval.eval.items()}
+        badminton_res["agg_metrics"] = agg_metrics
+
+        return badminton_res
 
 # TODO better structure for this.
 from pycocoevalcap.eval import COCOEvalCap
@@ -223,3 +273,29 @@ def flickr30k_caption_eval(results_file, split):
     print(f"CIDEr: {flickr_eval.eval['CIDEr']:.3f}")
 
     return flickr_eval
+
+def badminton_caption_eval(results_file, split):
+    files = {
+        "val": "lavis/configs/datasets/badminton_caption/input/val_gt.json",
+        "test": "lavis/configs/datasets/badminton_caption/input/test_gt.json",
+    }
+    annotation_file = files[split]
+
+    badminton = COCO(annotation_file)
+    badminton_result = badminton.loadRes(results_file)
+
+    # create COCOEvalCap object by taking badminton and badminton_result
+    badminton_eval = COCOEvalCap(badminton, badminton_result)
+
+    # evaluate on a subset of images by setting
+    # badminton_eval.params["image_id"] = badminton_result.getImgIds()  
+    # ↑ 如果要評估整個驗證集，請移除此行
+
+    # evaluate results
+    badminton_eval.evaluate()
+
+    # print CIDEr and SPICE scores
+    print(f"CIDEr: {badminton_eval.eval['CIDEr']:.3f}")
+    print(f"SPICE: {badminton_eval.eval['SPICE']:.3f}")
+
+    return badminton_eval

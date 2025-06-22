@@ -16,7 +16,10 @@ from lavis.common.vqa_tools.vqa_vizwiz import VQA_Vizwiz
 from lavis.common.vqa_tools.vqa_eval import VQAEval
 from lavis.common.vqa_tools.vqa_eval_vizwiz import VQAEval_Vizwiz
 from lavis.tasks.base_task import BaseTask
-
+import numpy as np
+import re
+import pandas as pd
+import statistics
 
 @registry.register_task("vqa")
 class VQATask(BaseTask):
@@ -423,7 +426,333 @@ class ScienceQATask(VQATask):
         logging.info(metrics)
 
         return metrics
-      
+
+# @registry.register_task("badminton_qa")
+# class BadmintonQATask(VQATask):
+#     """
+#     Task for chunk-based badminton QA using predict_answers.
+#     Eval metrics: Hit@1, Exact Match, token-level F1.
+#     """
+
+#     def build_datasets(self, cfg):
+#         return super().build_datasets(cfg)
+
+#     # def valid_step(self, model, samples):
+#     #     predictions = model.predict_answers(
+#     #         samples=samples,
+#     #         num_beams=self.num_beams,
+#     #         inference_method="generate",
+#     #         max_len=self.max_len,
+#     #         min_len=self.min_len,
+#     #         prompt=self.prompt,
+#     #     )
+
+#     #     results = []
+#     #     qids = samples["question_id"]
+#     #     gts  = samples["answer"]
+#     #     for pred, qid, gt in zip(predictions, qids, gts):
+#     #         results.append({
+#     #             "question_id": qid,
+#     #             "pred_ans":    pred.strip(),
+#     #             "gt_ans":      gt.strip(),
+#     #         })
+#     #     return results
+
+#     def extract_ans(text: str) -> str:
+#         """
+#         從帶 CoT 的文字中抽出最終 '<answer>…</answer>' 或標準句型，
+#         若都不符合則回傳空字串。
+#         """
+#         # 1. 優先取 <answer>…</answer>
+#         m = re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL)
+#         if m:
+#             return m.group(1).strip()
+#         # 2. 嘗試取標準句型
+#         m2 = re.search(r"The event happens at strokes? ([\d,]+)", text)
+#         if m2:
+#             nums   = m2.group(1)
+#             s_or_p = "strokes" if "," in nums else "stroke"
+#             return f"The event happens at {s_or_p} {nums}"
+#         # 3. 都不符就回空
+#         return ""
+
+#     def valid_step(self, model, samples):
+#         predictions = model.predict_answers(
+#             samples=samples,
+#             num_beams=self.num_beams,
+#             inference_method="generate",
+#             max_len=self.max_len,
+#             min_len=self.min_len,
+#             prompt=self.prompt,
+#         )
+
+#         results = []
+#         qids = samples["question_id"]
+#         gts  = samples["answer"]
+#         for pred, qid, gt in zip(predictions, qids, gts):
+#             full_pred = pred.strip()
+#             full_gt   = gt.strip()
+
+#             # 抽出預測與標準的純答案
+#             pred_ans = extract_ans(full_pred)
+#             gt_ans   = extract_ans(full_gt)
+
+#             results.append({
+#                 "question_id": qid,
+#                 "raw_pred":    full_pred,
+#                 "raw_gt":      full_gt,
+#                 "pred_ans":    pred_ans,
+#                 "gt_ans":      gt_ans,
+#             })
+#         return results
+
+#     def after_evaluation(self, val_result, split_name,epoch, **kwargs):
+#         result_file = self.save_result(
+#             val_result,
+#             result_dir=registry.get_path("result_dir"),
+#             filename=f"{split_name}_badminton_qa_result_epoch{epoch}",
+#             remove_duplicate=""
+#         )
+#         metrics = None
+#         if split_name == 'val':
+#             metrics = self._report_metrics(result_file=result_file, split=split_name)
+#         return metrics
+
+#     @dist_utils.main_process
+#     def _report_metrics(self, result_file, split):
+#         with open(result_file, "r", encoding="utf-8") as f:
+#             records = json.load(f)
+
+#         # step 1: 提取 pred_list 和 gt_list
+#         def extract_numbers_per_entry(data):
+#             pattern = re.compile(r'\b\d+\b')
+#             results = []
+
+#             for entry in data:
+#                 pred_numbers = list(set(map(int, pattern.findall(entry.get("pred_ans", "")))))
+#                 gt_numbers = list(set(map(int, pattern.findall(entry.get("gt_ans", "")))))
+#                 results.append({
+#                     "question_id": entry["question_id"],
+#                     "pred_list": sorted(pred_numbers),
+#                     "gt_list": sorted(gt_numbers)
+#                 })
+
+#             return results
+
+#         # step 2: 計算指標
+#         def evaluate_predictions(df, hit_k=1):
+#             hit1_count = 0
+#             exact_match_count = 0
+#             all_precisions = []
+#             all_recalls = []
+#             all_f1s = []
+
+#             for _, row in df.iterrows():
+#                 pred = row["pred_list"]
+#                 gt = row["gt_list"]
+
+#                 pred_set = set(pred)
+#                 gt_set = set(gt)
+
+#                 # Hit@1: 第一個預測是否在 GT 裡
+#                 if pred and pred[0] in gt_set:
+#                     hit1_count += 1
+
+#                 # Exact Match
+#                 if pred_set == gt_set:
+#                     exact_match_count += 1
+
+#                 # Precision / Recall / F1
+#                 if pred_set:
+#                     precision = len(pred_set & gt_set) / len(pred_set)
+#                 else:
+#                     precision = 1.0 if not gt_set else 0.0
+
+#                 if gt_set:
+#                     recall = len(pred_set & gt_set) / len(gt_set)
+#                 else:
+#                     recall = 1.0 if not pred_set else 0.0
+
+#                 if precision + recall > 0:
+#                     f1 = 2 * precision * recall / (precision + recall)
+#                 else:
+#                     f1 = 0.0
+
+#                 all_precisions.append(precision)
+#                 all_recalls.append(recall)
+#                 all_f1s.append(f1)
+
+#             total = len(df)
+#             if total == 0:
+#                 return {
+#                     "hit@1": 0.0,
+#                     "exact_match": 0.0,
+#                     "f1": 0.0,
+#                     "agg_metrics": 0.0,
+#                 }
+
+#             return {
+#                 "hit@1": float(hit1_count / total * 100),
+#                 "exact_match": float(exact_match_count / total * 100),
+#                 "precision": float(np.mean(all_precisions) * 100),
+#                 "recall": float(np.mean(all_recalls) * 100),
+#                 "f1": float(np.mean(all_f1s) * 100),
+#                 "agg_metrics": float(np.mean(all_f1s) * 100),
+#             }
+
+#         # 執行提取與評估
+#         processed = extract_numbers_per_entry(records)
+#         df = pd.DataFrame(processed)
+#         metrics = evaluate_predictions(df)
+
+#         # Logging
+#         log_path = os.path.join(registry.get_path("output_dir"), "log.txt")
+#         with open(log_path, "a") as f:
+#             f.write(json.dumps(metrics) + "\n")
+#         logging.info(f"[BadmintonQA] {split} metrics: {metrics}")
+#         return metrics
+
+@registry.register_task("badminton_qa")
+class BadmintonQATask(VQATask):
+    """
+    Task for chunk-based badminton QA using predict_answers.
+    Eval metrics: Hit@1, Exact Match, token-level F1.
+    """
+
+    def build_datasets(self, cfg):
+        return super().build_datasets(cfg)
+
+    @staticmethod
+    def extract_ans(text: str) -> list[int]:
+        """
+        從帶 CoT 的文字中抽出最終答案的數字列表；
+        若檢測到 <answer>…</answer> 或標準句型，回傳其中的整數；
+        否則回傳空 list。
+        """
+        # 1. 優先取 <answer>…</answer> 裡的數字
+        m = re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL)
+        if m:
+            nums = re.findall(r"\b\d+\b", m.group(1))
+            return list(map(int, nums))
+
+        # 2. 嘗試取標準句型裡的數字
+        m2 = re.search(r"The event happens at strokes? ([\d,]+)", text)
+        if m2:
+            nums = m2.group(1).split(",")
+            return [int(n) for n in nums]
+
+        # 3. 都不符合就回空
+        return []
+
+    def valid_step(self, model, samples):
+        predictions = model.predict_answers(
+            samples=samples,
+            num_beams=self.num_beams,
+            inference_method="generate",
+            max_len=self.max_len,
+            min_len=self.min_len,
+            prompt=self.prompt,
+        )
+
+        results = []
+        qids = samples["question_id"]
+        gts  = samples["answer"]
+        for pred, qid, gt in zip(predictions, qids, gts):
+            full_pred = pred.strip()
+            full_gt   = gt.strip()
+
+            # 直接從 CoT 中抽出數字列表
+            pred_list = self.extract_ans(full_pred)
+            gt_list   = self.extract_ans(full_gt)
+
+            results.append({
+                "question_id": qid,
+                "raw_pred":    full_pred,
+                "raw_gt":      full_gt,
+                "pred_list":   pred_list,
+                "gt_list":     gt_list,
+            })
+        return results
+
+    def after_evaluation(self, val_result, split_name, epoch, **kwargs):
+        result_file = self.save_result(
+            val_result,
+            result_dir=registry.get_path("result_dir"),
+            filename=f"{split_name}_badminton_qa_result_epoch{epoch}",
+            remove_duplicate=""
+        )
+        metrics = None
+        if split_name == 'val':
+            metrics = self._report_metrics(result_file=result_file, split=split_name)
+        return metrics
+
+    @dist_utils.main_process
+    def _report_metrics(self, result_file, split):
+        # 讀取結果
+        with open(result_file, "r", encoding="utf-8") as f:
+            records = json.load(f)
+
+        # 分成可回答與不可能題
+        answerable = [r for r in records if r["gt_list"]]
+        impossible  = [r for r in records if not r["gt_list"]]
+
+        # 可回答題指標
+        hit1_count = 0
+        exact_match_count = 0
+        precisions = []
+        recalls = []
+        f1s = []
+
+        for r in answerable:
+            pred_set = set(r["pred_list"])
+            gt_set   = set(r["gt_list"])
+            # Hit@1
+            if r["pred_list"] and r["pred_list"][0] in gt_set:
+                hit1_count += 1
+            # Exact Match
+            if pred_set == gt_set:
+                exact_match_count += 1
+            # Precision
+            precision = len(pred_set & gt_set) / len(pred_set) if r["pred_list"] else 0.0
+            # Recall
+            recall = len(pred_set & gt_set) / len(gt_set)
+            # F1
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+
+            precisions.append(precision)
+            recalls.append(recall)
+            f1s.append(f1)
+
+        total_ans = len(answerable)
+        metrics_ans = {
+            "hit@1":       hit1_count / total_ans * 100 if total_ans else 0.0,
+            "exact_match": exact_match_count / total_ans * 100 if total_ans else 0.0,
+            "precision":   statistics.mean(precisions) * 100 if precisions else 0.0,
+            "recall":      statistics.mean(recalls)    * 100 if recalls    else 0.0,
+            "f1":          statistics.mean(f1s)        * 100 if f1s        else 0.0
+        }
+
+        # 不可能題指標
+        impossible_correct = sum(1 for r in impossible if not r["pred_list"])
+        total_imp = len(impossible)
+        metrics_imp = {
+            "impossible_accuracy": impossible_correct / total_imp * 100 if total_imp else 0.0
+        }
+
+                # 合併報表，並加入 agg_metrics (使用 f1 作為聚合指標)
+        metrics = {
+            **metrics_ans,
+            **metrics_imp,
+            "agg_metrics": metrics_ans["f1"]
+        }
+
+        # Logging
+        log_path = os.path.join(registry.get_path("output_dir"), "log.txt")
+        with open(log_path, "a") as f:
+            f.write(json.dumps(metrics) + "\n")
+        logging.info(f"[BadmintonQA] {split} metrics: {metrics}")
+        return metrics
+
 
 @registry.register_task("vizwiz")
 class VizWizTask(VQATask):

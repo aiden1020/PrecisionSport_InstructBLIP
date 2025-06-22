@@ -413,6 +413,7 @@ class RunnerBase:
                     val_log = self.eval_epoch(
                         split_name=split_name, cur_epoch=cur_epoch
                     )
+                    print(f"val_log: {val_log}")
                     if val_log is not None:
                         if is_main_process():
                             assert (
@@ -462,7 +463,6 @@ class RunnerBase:
                 )
 
             return test_logs
-
     def train_epoch(self, epoch):
         # train
         self.model.train()
@@ -506,7 +506,6 @@ class RunnerBase:
             dataset=self.datasets[split_name],
         )
         results = self.task.evaluation(model, data_loader)
-
         if results is not None:
             return self.task.after_evaluation(
                 val_result=results,
@@ -601,20 +600,42 @@ class RunnerBase:
 
         return loaders
 
+    # @main_process
+    # def _save_checkpoint(self, cur_epoch, is_best=False):
+    #     """
+    #     Save the checkpoint at the current epoch.
+    #     """
+    #     model_no_ddp = self.unwrap_dist_model(self.model)
+    #     param_grad_dic = {
+    #         k: v.requires_grad for (k, v) in model_no_ddp.named_parameters()
+    #     }
+    #     state_dict = model_no_ddp.state_dict()
+    #     for k in list(state_dict.keys()):
+    #         if k in param_grad_dic.keys() and not param_grad_dic[k]:
+    #             # delete parameters that do not require gradient
+    #             del state_dict[k]
+
+    #     save_obj = {
+    #         "model": state_dict,
+    #         "optimizer": self.optimizer.state_dict(),
+    #         "config": self.config.to_dict(),
+    #         "scaler": self.scaler.state_dict() if self.scaler else None,
+    #         "epoch": cur_epoch,
+    #     }
+    #     save_to = os.path.join(
+    #         self.output_dir,
+    #         "checkpoint_{}.pth".format("best" if is_best else cur_epoch),
+    #     )
+    #     logging.info("Saving checkpoint at epoch {} to {}.".format(cur_epoch, save_to))
+    #     torch.save(save_obj, save_to)
     @main_process
     def _save_checkpoint(self, cur_epoch, is_best=False):
         """
         Save the checkpoint at the current epoch.
         """
         model_no_ddp = self.unwrap_dist_model(self.model)
-        param_grad_dic = {
-            k: v.requires_grad for (k, v) in model_no_ddp.named_parameters()
-        }
+
         state_dict = model_no_ddp.state_dict()
-        for k in list(state_dict.keys()):
-            if k in param_grad_dic.keys() and not param_grad_dic[k]:
-                # delete parameters that do not require gradient
-                del state_dict[k]
 
         save_obj = {
             "model": state_dict,
@@ -665,11 +686,13 @@ class RunnerBase:
             raise RuntimeError("checkpoint url or path is invalid")
 
         state_dict = checkpoint["model"]
-        self.unwrap_dist_model(self.model).load_state_dict(state_dict)
+        self.unwrap_dist_model(self.model).load_state_dict(state_dict, strict=False)
 
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        if self.scaler and "scaler" in checkpoint:
-            self.scaler.load_state_dict(checkpoint["scaler"])
+        logging.warning("Skipping optimizer and scaler state loading to avoid shape mismatch.")
+
+        # self.optimizer.load_state_dict(checkpoint["optimizer"])
+        # if self.scaler and "scaler" in checkpoint:
+        #     self.scaler.load_state_dict(checkpoint["scaler"])
 
         self.start_epoch = checkpoint["epoch"] + 1
         logging.info("Resume checkpoint from {}".format(url_or_filename))
