@@ -159,3 +159,12 @@ cache/
 lavis/coco
 lavis/vg
 lavis/scienceqa
+lavis/configs/datasets/badminton_caption/*
+lavis/configs/datasets/badminton_qa/*
+lavis/configs/datasets/scienceqa/*
+lavis/configs/datasets/badminton_qa_coT/*
+output/*
+lavis/models/tc_clip_encoder/weight/*
+Archive/*
+input/*
+nohup.out
