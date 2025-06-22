@@ -1,0 +1,23 @@
+#@package _global_
+data:
+  test:
+  - dataset_list:
+    - ann_file: custom_dataset/val/29.txt
+      dataset_name: custom_dataset_val
+      label_file: labels/custom_dataset_labels.csv
+      num_classes: 32
+      root: custom_dataset/videos
+    name: custom_dataset_val
+    protocol: top1
+  train:
+    ann_file: custom_dataset/train.txt
+    dataset_name: custom_dataset_few_shot_train_{shot}_shot
+    label_file: labels/custom_dataset_labels.csv
+    num_classes: 32
+    root: custom_dataset/videos
+  val:
+    ann_file: custom_dataset/val/0.txt
+    dataset_name: custom_dataset_val
+    label_file: labels/custom_dataset_labels.csv
+    num_classes: 32
+    root: custom_dataset/videos
