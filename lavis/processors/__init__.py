@@ -18,6 +18,9 @@ from lavis.processors.blip_processors import (
     BlipCaptionProcessor,
     InstructBlipQuestionProcessor
 )
+from lavis.processors.tc_clip_processors import (
+    TCClipImageEvalProcessor
+)
 from lavis.processors.blip_diffusion_processors import (
     BlipDiffusionInputImageProcessor,
     BlipDiffusionTargetImageProcessor,
@@ -49,6 +52,8 @@ __all__ = [
     # GPT
     "GPTVideoFeatureProcessor",
     "GPTDialogueProcessor",
+    # TC-CLIP
+    "TCClipImageEvalProcessor",
 ]
 
 
