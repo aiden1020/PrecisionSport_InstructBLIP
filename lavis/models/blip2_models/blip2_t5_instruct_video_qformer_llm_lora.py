@@ -54,7 +54,7 @@ class Blip2T5InstructVideoQformerLLMLoRA(Blip2Base):
         vit_precision="fp16",
         freeze_vit=True,
         num_query_token=32,
-        max_clips=5,
+        max_clips=16,
         t5_model="google/flan-t5-xl",
         prompt="",
         max_txt_len=128,
