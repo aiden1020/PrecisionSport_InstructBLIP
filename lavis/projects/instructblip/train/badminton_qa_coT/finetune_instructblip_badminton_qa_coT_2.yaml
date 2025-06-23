@@ -38,25 +38,43 @@ datasets:
         name: "instruct_blip_question"
       eval:
         name: "instruct_blip_question"
+    build_info:
+      # Be careful not to append minus sign (-) before split to avoid itemizing
+      annotations:
+        train:
+          storage: ./configs/datasets/badminton_qa_coT_chunk10/input/train.json
+        val:
+          storage: ./configs/datasets/badminton_qa_coT_chunk10/input/val.json
+        test:
+          storage: ./configs/datasets/badminton_qa_coT_chunk10/input/val.json
+
+      images:
+        storage: ./configs/datasets/badminton_qa/input/images
+        train:
+          storage:  ./configs/datasets/badminton_qa/input/images
+        val:
+          storage:  ./configs/datasets/badminton_qa/input/images
+        test:
+          storage:  ./configs/datasets/badminton_qa/input/images
 
 run:
   task: badminton_qa
   # optimizer
-  lr_sched: "linear_warmup_cosine_lr"
-  init_lr:  5e-5
+  lr_sched: "linear_decay_lr"
+  init_lr:  5e-4
   min_lr: 0
-  warmup_lr: 1e-8
-  warmup_steps: 1000
+  warmup_lr: 1e-4
+  warmup_steps: 0
   #total_batch: 16
   weight_decay: 0.05
   max_epoch: 20
-  batch_size_train: 4
-  accum_grad_iters: 4
-  batch_size_eval: 2
+  batch_size_train: 6
+  accum_grad_iters: 2
+  batch_size_eval: 6
   num_workers: 4
   disable_early_stopping: True
-  max_len: 30
-  min_len: 10
+  max_len: 256
+  min_len: 30
   num_beams: 5
   # inference-specific
   inference_method: "rank"

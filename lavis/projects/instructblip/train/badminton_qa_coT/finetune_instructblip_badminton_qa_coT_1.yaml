@@ -38,6 +38,23 @@ datasets:
         name: "instruct_blip_question"
       eval:
         name: "instruct_blip_question"
+    build_info:
+      annotations:
+        train:
+          storage: ./configs/datasets/badminton_qa_coT_chunk5/input/train.json
+        val:
+          storage: ./configs/datasets/badminton_qa_coT_chunk5/input/val.json
+        test:
+          storage: ./configs/datasets/badminton_qa_coT_chunk5/input/val.json
+
+      images:
+        storage: ./configs/datasets/badminton_qa/input/images
+        train:
+          storage:  ./configs/datasets/badminton_qa/input/images
+        val:
+          storage:  ./configs/datasets/badminton_qa/input/images
+        test:
+          storage:  ./configs/datasets/badminton_qa/input/images
 
 run:
   task: badminton_qa
