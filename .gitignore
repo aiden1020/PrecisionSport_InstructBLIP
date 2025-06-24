@@ -166,3 +166,4 @@ Archive/*
 input/*
 nohup.out
 low_score_samples.json
+run_scripts/instructblip/train/run_finetune_instructblip_experiments.sh

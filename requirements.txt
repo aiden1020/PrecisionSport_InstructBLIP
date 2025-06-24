@@ -29,4 +29,10 @@ transformers>=4.28.0
 webdataset
 wheel
 peft
-scikit-learn
+pathlib==1.0.1
+mmcv-full==1.7.0
+termcolor==2.1.1
+regex==2022.10.31
+yacs==0.1.8
+hydra-core==1.3.2
+wandb==0.16.2
