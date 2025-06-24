@@ -168,7 +168,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
                 encoder_attention_mask=image_atts,
                 return_dict=True,
             )
-            print(f"query_output shape: {query_output.last_hidden_state.shape}")
         else:
             query_output = self.Qformer.bert(
                 query_embeds=query_tokens,
@@ -178,7 +177,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
             )
 
         inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:])
-        print(f"inputs_t5 shape: {inputs_t5.shape}")
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
         fs_embeds, fs_atts = None, None
@@ -208,7 +206,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
             )
 
             inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
-            print(f"inputs_embeds shape: {inputs_embeds.shape}")
             inputs_embeds = torch.cat([inputs_t5, inputs_embeds], dim=1)
 
             if fs_embeds is not None:
@@ -317,7 +314,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
     ):
         if "prompt" in samples.keys():
             prompt = samples["prompt"]
-            print(prompt)
         else:
             prompt = self.prompt
 
@@ -413,7 +409,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
             )
 
         inputs_t5 = self.t5_proj(query_output.last_hidden_state[:,:query_tokens.size(1),:]) # Qformer token = 32
-        print("Q-former to T5 token =", inputs_t5.size(1)) 
 
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
 
@@ -428,8 +423,6 @@ class Blip2T5InstructQformerLoRA(Blip2Base):
         with self.maybe_autocast(dtype=torch.bfloat16):
             inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
             inputs_embeds = torch.cat([inputs_t5, inputs_embeds], dim=1)
-            print("Prompt token數 =", input_tokens.input_ids.size(1))
-            print("T5 encoder 總輸入 token數 =", inputs_embeds.size(1))
 
             outputs = self.t5_model.generate(
                 inputs_embeds=inputs_embeds,
