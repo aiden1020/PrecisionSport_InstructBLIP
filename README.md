@@ -52,7 +52,10 @@ pip install -r requirements.txt
 | -------------------------------------- | ----- | ----- | ----- | ----- |
 | Q-Former LoRA (cross-attn, FlanT5-XL)  | 1     | 2     | 3     | 4     |
 
+3. Generate Dataset
 
+check it from (PrecisionSportDataset)
+https://github.com/aiden1020/PrecisionSportDataset
 ### Run script
 
 For example, if you want to try experiment 1 for badminton_caption, you can use this command.
