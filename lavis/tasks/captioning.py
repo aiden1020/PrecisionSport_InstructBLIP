@@ -12,7 +12,7 @@ import tempfile
 from lavis.common.dist_utils import main_process
 from lavis.common.registry import registry
 from lavis.tasks.base_task import BaseTask
-
+import re
 
 @registry.register_task("captioning")
 class CaptionTask(BaseTask):
@@ -189,7 +189,7 @@ class BadmintonCaptionTask(CaptionTask):
     def _report_metrics(self, eval_result_file, split_name):
         badminton_eval = badminton_caption_eval(eval_result_file, split_name)
 
-        agg_metrics = badminton_eval.eval["CIDEr"] + badminton_eval.eval["SPICE"]
+        agg_metrics = (badminton_eval.stroke_acc + badminton_eval.area_acc)/2
         log_stats = {split_name: {k: v for k, v in badminton_eval.eval.items()}}
 
         with open(
@@ -280,22 +280,59 @@ def badminton_caption_eval(results_file, split):
         "test": "lavis/configs/datasets/badminton_caption/input/test_gt.json",
     }
     annotation_file = files[split]
+    coco_gt  = COCO(annotation_file)
+    coco_res = coco_gt.loadRes(results_file)
 
-    badminton = COCO(annotation_file)
-    badminton_result = badminton.loadRes(results_file)
+    coco_eval = COCOEvalCap(coco_gt, coco_res)
+    coco_eval.evaluate()
+    print(f"CIDEr: {coco_eval.eval['CIDEr']:.3f}")
+    print(f"SPICE: {coco_eval.eval['SPICE']:.3f}")
 
-    # create COCOEvalCap object by taking badminton and badminton_result
-    badminton_eval = COCOEvalCap(badminton, badminton_result)
+    pattern = r'(.+?) hits a (.+?) (?:at|in|on) (?:the )?(.+?)(?:\.|$)'
+    def extract_parts(caption):
+        m = re.match(pattern, caption.lower())
+        if not m:
+            return None
+        _, stroke, area = m.groups()
+        stroke = stroke.replace('-', ' ').strip()
+        area   = area.replace('-', ' ').strip()
+        return stroke, area
 
-    # evaluate on a subset of images by setting
-    # badminton_eval.params["image_id"] = badminton_result.getImgIds()  
-    # ↑ 如果要評估整個驗證集，請移除此行
+    img_ids = coco_gt.getImgIds()
+    total = len(img_ids)
+    stroke_correct = 0
+    area_correct   = 0
 
-    # evaluate results
-    badminton_eval.evaluate()
+    for img_id in img_ids:
+        res_ann_ids = coco_res.getAnnIds(imgIds=[img_id])
+        res_anns    = coco_res.loadAnns(res_ann_ids)
+        if not res_anns:
+            continue
+        pred = extract_parts(res_anns[0]['caption'])
+        if not pred:
+            continue
+        pred_stroke, pred_area = pred
 
-    # print CIDEr and SPICE scores
-    print(f"CIDEr: {badminton_eval.eval['CIDEr']:.3f}")
-    print(f"SPICE: {badminton_eval.eval['SPICE']:.3f}")
+        gt_ann_ids = coco_gt.getAnnIds(imgIds=[img_id])
+        gt_anns    = coco_gt.loadAnns(gt_ann_ids)
+        ref_strokes = set()
+        ref_areas   = set()
+        for ann in gt_anns:
+            parts = extract_parts(ann['caption'])
+            if parts:
+                s, a = parts
+                ref_strokes.add(s)
+                ref_areas.add(a)
 
-    return badminton_eval
+        if pred_stroke in ref_strokes:
+            stroke_correct += 1
+        if pred_area in ref_areas:
+            area_correct += 1
+
+    stroke_acc = stroke_correct / total if total else 0
+    area_acc   = area_correct   / total if total else 0
+    coco_eval.stroke_acc = stroke_acc
+    coco_eval.area_acc   = area_acc
+    print("Stroke accuracy:", coco_eval.stroke_acc)
+    print("Area accuracy:  ", coco_eval.area_acc)
+    return coco_eval
