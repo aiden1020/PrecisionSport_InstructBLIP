@@ -198,6 +198,8 @@ class BadmintonCaptionTask(CaptionTask):
             f.write(json.dumps(log_stats) + "\n")
 
         badminton_res = {k: v for k, v in badminton_eval.eval.items()}
+        badminton_res["stroke_acc"] = badminton_eval.stroke_acc
+        badminton_res["area_acc"] = badminton_eval.area_acc
         badminton_res["agg_metrics"] = agg_metrics
 
         return badminton_res
