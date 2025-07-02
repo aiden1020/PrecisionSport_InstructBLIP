@@ -78,7 +78,7 @@ class BadmintonCaptionEvalDataset(CaptionEvalDataset):
         instruction = "<Video> A short video description:"
         instruction = self.text_processor(instruction)
 
-        caption = ann["caption"][0]  # ann["caption"] is a list of 5 possible captions
+        caption = ann["caption"] 
         caption = self.text_processor(caption)
 
         img_id = re.search(img_id_pattern, ann["image"]).group(1)
