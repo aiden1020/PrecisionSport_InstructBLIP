@@ -4,18 +4,18 @@
 # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 
 model:
-  arch: blip2_t5_instruct_qformer_llm_lora
-  model_type: flant5xl
+  arch: blip2_vicuna_instruct_qformer_lora
+  model_type: vicuna7b
   vit_model: tc_clip
   load_pretrained: True #pretrain from scratch
   freeze_vit: True
 
-  lora_r: 2
+  lora_r: 8
   lora_alpha: 8
   lora_dropout: 0
-  self_attention_qv_lora: True
+  self_attention_qv_lora: False
   self_attention_output_lora: False
-  ffn_lora: True
+  ffn_lora: False
   qformer_crossattention_lora_q: True
   qformer_crossattention_lora_k: True
   qformer_crossattention_lora_v: True
@@ -45,7 +45,8 @@ run:
   min_lr: 0
   warmup_lr: 1e-8
   warmup_steps: 1000
-  
+  disable_early_stopping: True
+
   #total_batch: 16
   weight_decay: 0.05
   max_epoch: 20
@@ -61,7 +62,7 @@ run:
   inference_method: "rank"
 
   seed: 42
-  output_dir: "output/results/badminton_caption/badminton_caption_6"
+  output_dir: "output/results/badminton_caption/badminton_caption_12"
 
   amp: True
   resume_ckpt_path: null

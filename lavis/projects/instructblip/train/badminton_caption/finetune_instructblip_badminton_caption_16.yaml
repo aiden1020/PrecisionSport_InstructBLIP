@@ -10,7 +10,7 @@ model:
   load_pretrained: True #pretrain from scratch
   freeze_vit: True
 
-  lora_r: 2
+  lora_r: 8
   lora_alpha: 8
   lora_dropout: 0
   self_attention_qv_lora: True
@@ -61,7 +61,7 @@ run:
   inference_method: "rank"
 
   seed: 42
-  output_dir: "output/results/badminton_caption/badminton_caption_6"
+  output_dir: "output/results/badminton_caption/badminton_caption_16"
 
   amp: True
   resume_ckpt_path: null

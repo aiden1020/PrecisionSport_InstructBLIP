@@ -15,7 +15,7 @@ model:
   lora_dropout: 0
   self_attention_qv_lora: True
   self_attention_output_lora: False
-  ffn_lora: True
+  ffn_lora: False
   qformer_crossattention_lora_q: True
   qformer_crossattention_lora_k: True
   qformer_crossattention_lora_v: True
@@ -61,7 +61,7 @@ run:
   inference_method: "rank"
 
   seed: 42
-  output_dir: "output/results/badminton_caption/badminton_caption_6"
+  output_dir: "output/results/badminton_caption/badminton_caption_14"
 
   amp: True
   resume_ckpt_path: null
