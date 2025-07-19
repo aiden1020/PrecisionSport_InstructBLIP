@@ -55,7 +55,9 @@ https://github.com/aiden1020/PrecisionSportDataset
 |                                        | r = 1 | r = 2 | r = 4 | r = 8 |
 | -------------------------------------- | ----- | ----- | ----- | ----- |
 | Q-Former LoRA (cross-attn, FlanT5-XL)  | 1     | 2     | 3     | 4     |
-
+| Q-Former LoRA (all, FlanT5-XL)         | 5     | 6     | 7     | 8     |
+| Q-Former LoRA (cross-attn, Vicuna-7b)  | 9     | 10    | 11    | 12    |
+| Q-Former LoRA (all, Vicuna-7b)         | 13    | 14    | 15    | 16    |
 
 ### Run script
 
