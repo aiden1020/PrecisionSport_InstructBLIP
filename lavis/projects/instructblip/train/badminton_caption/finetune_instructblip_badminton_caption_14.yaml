@@ -15,7 +15,7 @@ model:
   lora_dropout: 0
   self_attention_qv_lora: True
   self_attention_output_lora: False
-  ffn_lora: False
+  ffn_lora: True
   qformer_crossattention_lora_q: True
   qformer_crossattention_lora_k: True
   qformer_crossattention_lora_v: True
