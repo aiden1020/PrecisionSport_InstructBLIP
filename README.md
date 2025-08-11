@@ -75,6 +75,23 @@ For visual question answering (VQA) inference, please refer to the [`inference_v
 - Formulate questions about video content.
 - Get answers from the model, including temporal localization of events.
 
+## Video Analysis and Diversity Sampling
+
+In addition to semantic retrieval, this project includes a powerful pipeline for video analysis and diversity sampling. This pipeline leverages the trained models to first retrieve relevant clips based on natural language queries and then selects a diverse subset for detailed analysis.
+
+For a detailed explanation of this pipeline, please see the [Diversity README](./diversity/README.md).
+
+### Key Features
+- **Intelligent Video Retrieval**: Uses the InstructBLIP model for VQA-based retrieval of clips.
+- **Feature Extraction**: Employs a TC-CLIP encoder to generate feature vectors for videos.
+- **Diversity Sampling**: Implements a farthest-first algorithm to select a diverse set of clips.
+- **Analysis and Visualization**: Provides tools to compare diversity sampling against random sampling, including PCA plots and statistical reports.
+
+To run this pipeline, you can use the `run_pipeline.py` script:
+```bash
+torchrun --nproc_per_node=<num_gpus> run_pipeline.py
+```
+
 ## Citation
 ```bibtex
 @inproceedings{kim2024towards,

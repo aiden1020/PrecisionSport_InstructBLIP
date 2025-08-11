@@ -1,160 +1,136 @@
-# Precision Sport Diversity
+# Badminton Video Analysis and Diversity Sampling
 
-A deep learning pipeline for badminton video analysis and diversity sampling, designed to extract meaningful features from sports videos and select diverse representative clips for analysis.
+A deep learning pipeline for badminton video analysis and diversity sampling. This project leverages the InstructBLIP model to retrieve relevant video clips based on natural language queries and then uses a TC-CLIP encoder to extract features for diversity sampling.
 
 ## Overview
 
 This project implements a sophisticated video analysis system that:
-- **Retrieves** badminton video clips based on stroke type queries
-- **Extracts** deep learning features using a TC-CLIP encoder model
-- **Samples** diverse video clips using farthest-first diversity sampling
-- **Analyzes** badminton strokes including serves, smashes, drops, and net shots
+- **Retrieves** badminton video clips by understanding natural language questions about the content of the videos via an InstructBLIP model.
+- **Extracts** deep learning features using a TC-CLIP encoder model.
+- **Samples** a diverse set of video clips using a farthest-first sampling algorithm.
+- **Analyzes** and **visualizes** the diversity of the selected clips compared to a random baseline.
+- **Generates** summary videos and detailed reports of the sampling results.
 
 ## Features
 
-### 🏸 Stroke Recognition
-- Supports multiple badminton stroke types: serve, smash, drop shot, net lift, etc.
-- Handles both Chinese and English stroke descriptions
-- Processes video clips with temporal and spatial feature extraction
+### 🏸 Intelligent Video Retrieval
+- Uses **InstructBLIP** for powerful video question-answering capabilities.
+- Retrieves clips based on complex, natural language queries about strokes, player positions, and events.
+- Processes long videos by chunking them into manageable segments for analysis.
 
 ### 🎯 Diversity Sampling
-- **Farthest-First Algorithm**: Selects maximally diverse video clips
-- **Cosine Similarity**: Measures feature similarity between clips
-- **Smart Selection**: Avoids redundant similar clips in final selection
+- **Farthest-First Algorithm**: Selects a maximally diverse set of video clips from the retrieved set.
+- **Cosine & Euclidean Distance**: Supports multiple metrics to measure feature similarity between clips.
+- **Comparative Analysis**: Benchmarks the diversity sampling against a random sampling control group to demonstrate effectiveness.
+
+### 📊 Visualization and Reporting
+- **PCA Visualization**: Generates PCA plots to visualize the feature space of video clips, highlighting the selected diverse and random sets.
+- **Statistical Reports**: Outputs detailed statistics, including mean, min, and max pairwise distances between features of selected clips.
+- **Video Summaries**: Creates concatenated video files from the selected clips for easy review.
 
 ## Project Structure
 
+The main components of the project are organized as follows:
+
 ```
-PrecisionSportDiversity/
-├── Dataset/
-│   ├── label/
-│   │   └── filtered_encoder_data.csv    # Stroke annotations
-│   └── video/                           # Video clips (.mp4)
-├── pipeline/
-│   ├── run_pipeline.py                  # Main execution script
-│   ├── retriever.py                     # CSV-based video retrieval
-│   ├── feature_extract.py               # TC-CLIP feature extraction
-│   ├── sampler.py                       # Diversity sampling algorithm
-│   └── models/
-│       └── tc_clip_encoder/             # Pre-trained model weights
-├── result/                              # Output analysis results
-└── Archive/                             # Legacy code
+.
+├── run_pipeline.py                  # Main execution script
+├── diversity/
+│   ├── pipeline/
+│   │   ├── retriever.py             # InstructBLIP-based video retrieval
+│   │   ├── feature_extract.py       # TC-CLIP feature extraction
+│   │   ├── sampler.py               # Diversity sampling algorithm
+│   │   └── visualise.py             # Visualization tools
+│   └── label/
+│       └── relabel_encoder_data.csv # Stroke annotations
+├── lavis/
+│   ├── projects/instructblip/       # InstructBLIP model configuration
+│   └── models/tc_clip_encoder/      # TC-CLIP model weights and config
+└── result/                          # Output for analysis, visualizations, and videos
 ```
-
-## Installation
-
-### Prerequisites
-- Python 3.8+
-- CUDA-capable GPU (recommended)
-- ffmpeg for video processing
-
-### Dependencies
-```bash
-pip install -r pipeline/models/tc_clip_encoder/requirements.txt
-```
-
-Key dependencies include:
-- `torch` - Deep learning framework
-- `mmcv-full==1.7.0` - Computer vision library
-- `decord==0.6.0` - Video decoding
-- `pandas` - Data manipulation
-- `numpy` - Numerical computing
-- `hydra-core` - Configuration management
 
 ## Usage
 
-### Basic Usage
+### Running the Pipeline
 
-Run the complete pipeline with default settings:
+To run the complete pipeline with default settings, execute the main script from the root directory of the project:
 
 ```bash
-cd /path/to/PrecisionSportDiversity
 python run_pipeline.py
 ```
 
+The script is configured for distributed data processing, so it's best to run it with `torchrun` for multi-GPU execution:
 
-### Configuration Options
+```bash
+torchrun --nproc_per_node=<num_gpus> run_pipeline.py
+```
 
-| Parameter | Description | Default |
+### Configuration
+
+The main parameters for the pipeline are set within the `main()` function in `run_pipeline.py`:
+
+| Parameter | Description | Default Value |
 |-----------|-------------|---------|
-| `query` | Stroke type to search for | "smash" |
-| `num_select` | Number of diverse clips to select | 5 |
-| `device_id` | GPU device ID | 0 |
-| `csv_path` | Path to annotation CSV | "Dataset/label/filtered_encoder_data.csv" |
-| `video_dir` | Directory containing video files | "Dataset/video" |
-
-## Dataset Format
-
-### Video Files
-- Format: MP4
-- Naming: `game{X}_set{Y}_{timestamp}.mp4`
-- Content: Short badminton stroke clips
-
-### Annotation CSV
-The `filtered_encoder_data.csv` contains:
-
-| Column | Description |
-|--------|-------------|
-| `id` | Video clip identifier |
-| `stroke_name` | English stroke name (serve, smash, drop, etc.) |
-| `type` | Chinese stroke description |
-| `hit_area` | Court position (1-9 grid system) |
-| `player` | Player position (upper/bottom) |
-| `backhand` | Backhand indicator (0/1) |
-| `stroke_LLM` | Detailed stroke description |
+| `csv_path` | Path to the annotation CSV file. | `"diversity/label/relabel_encoder_data.csv"` |
+| `game_id` | The identifier for the game to be analyzed. | `"game1"` |
+| `chunk_size` | The number of video clips to group into a single chunk for the VQA model. | `10` |
+| `batch_size` | The number of chunks to process in a single batch. | `2` |
+| `query` | The natural language question for retrieving relevant clips. | `"What stroke happens in the middle?"` |
+| `video_root` | The root directory containing the video files. | `"lavis/configs/datasets/badminton_caption/input/images"` |
+| `cfg_path` | Path to the InstructBLIP inference configuration file. | `"lavis/projects/instructblip/inference/inference_instructblip_badminton_qa_coT_3.yaml"` |
+| `num_select` | The number of diverse clips to select. | `10` |
+| `model_path` | Path to the pre-trained TC-CLIP encoder weights. | `"lavis/models/tc_clip_encoder/weight/fully-supervised-combined-22-86.pth"` |
 
 ## Algorithm Details
 
-### Diversity Sampling Algorithm
+### 1. Retrieval Phase
+- The `StrokeCsvRetriever` reads video metadata from the CSV.
+- It groups video clips from the specified `game_id` into chunks.
+- The `InstructBLIPBadmintonEngine` processes each chunk with the user's `query`.
+- It identifies and returns the paths of video clips that answer the query.
 
-1. **Retrieval Phase**: Query CSV for stroke-specific video IDs
-2. **Feature Extraction**: Process videos through TC-CLIP encoder
-3. **Diversity Selection**: Apply farthest-first sampling
-   - Start with random seed clip
-   - Iteratively select clips most dissimilar to already selected ones
-   - Use cosine similarity as distance metric
+### 2. Feature Extraction Phase
+- The `FeatureExtractor` takes the list of retrieved video paths.
+- Each video is processed through the pre-trained TC-CLIP model to get a high-dimensional feature vector.
+- This phase is distributed across available GPUs for efficiency.
 
-### Feature Extraction Pipeline
+### 3. Diversity Sampling Phase
+- The `VideoDiversitySampler` receives the feature vectors for all retrieved clips.
+- It applies a farthest-first sampling algorithm to select `num_select` clips that are most distant from each other in the feature space.
+- A control group of randomly selected clips is also generated for comparison.
 
-1. **Video Decoding**: Extract frames using Decord
-2. **Preprocessing**: Resize, crop, normalize frames
-3. **Encoding**: Pass through TC-CLIP model
-4. **Aggregation**: Average temporal features to single vector
+### 4. Analysis and Output
+- The `FeatureVisualizer` generates PCA plots to show the distribution of features and the positions of the selected clips.
+- It calculates and prints diversity metrics (e.g., mean cosine distance) for both the diversity-sampled and randomly-sampled sets.
+- The results, including selected video lists and summary videos, are saved to the `result/` directory.
 
 ## Model Information
 
-The project uses a pre-trained TC-CLIP encoder:
-- **Architecture**: Transformer-based video-text model
-- **Training**: Fully supervised on combined stroke dataset
-- **Performance**: 87% accuracy on stroke classification
-- **Input**: RGB video clips
-- **Output**: 512-dimensional feature vectors
+The pipeline uses two main models:
+
+1.  **InstructBLIP**: A vision-language model used for its powerful VQA capabilities to retrieve relevant video clips based on textual queries.
+2.  **TC-CLIP**: A Transformer-based video-text model, pre-trained for stroke classification, used here as a feature encoder to generate rich representations of video clips.
 
 ## Results and Analysis
 
-The pipeline outputs:
-- **Selected Video Paths**: Diverse representative clips
-- **Diversity Scores**: Quantitative measure of selection quality
-- **Feature Visualizations**: PCA analysis of stroke features (see `result/pca_smash_features.png`)
+The pipeline outputs several artifacts to the `result/` directory for analysis:
 
-### Example Output
+- **`selected_diversity.txt` / `selected_random.txt`**: Text files listing the paths of the selected videos for each sampling method.
+- **`farthest_first.mp4` / `uniform_sampling.mp4`**: Concatenated videos of the selected clips.
+- **PCA Visualization Images**: PNG files showing the feature distributions.
+- **Console Output**: Detailed logs, including comparative analysis and diversity metrics showing the improvement of diversity sampling over random selection.
+
+### Example Output (in `selected_diversity.txt`)
 ```
-=== Selected Videos (order, path, score) ===
-01. Dataset/video/game1_set1_17566.mp4 (score: 1.0000)
-02. Dataset/video/game1_set1_23504.mp4 (score: 0.1234)
-03. Dataset/video/game1_set1_20288.mp4 (score: 0.0987)
-04. Dataset/video/game1_set1_17291.mp4 (score: 0.0756)
-05. Dataset/video/game1_set1_25199.mp4 (score: 0.0623)
+Diversity Sampling Results for 'What stroke happens in the middle?' stroke
+Selected 10 videos from 150 total
+
+01. game1_set2_12345.mp4 (score: 1.0000)
+02. game1_set1_67890.mp4 (score: 0.1875)
+...
+
+Diversity Metrics:
+Mean Distance: 0.8543
+Std Distance: 0.0512
+Distance Range: [0.7654, 0.9321]
 ```
-
-## Applications
-
-### Sports Analysis
-- **Technique Comparison**: Analyze diverse stroke execution styles
-- **Training Aid**: Select representative examples for coaching
-- **Performance Metrics**: Quantify stroke diversity and consistency
-
-### Research Applications
-- **Dataset Curation**: Create balanced training sets
-- **Behavioral Analysis**: Study player strategy patterns
-- **Video Summarization**: Generate diverse highlight reels
