@@ -67,6 +67,14 @@ For example, if you want to try experiment 1 for badminton_caption, you can use 
 bash run_scripts/instructblip/train/run_finetune_instructblip_experiments.sh badminton_caption 1
 ```
 
+### Inference
+
+For visual question answering (VQA) inference, please refer to the [`inference_vqa.ipynb`](./inference_vqa.ipynb) notebook. This notebook provides examples for both single and batch inference on video clips. It demonstrates how to:
+- Load a trained model.
+- Process video clips and prepare them for the model.
+- Formulate questions about video content.
+- Get answers from the model, including temporal localization of events.
+
 ## Citation
 ```bibtex
 @inproceedings{kim2024towards,
