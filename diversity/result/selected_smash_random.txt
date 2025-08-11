@@ -1,0 +1,18 @@
+Random Sampling Results for 'smash' stroke (Control Group)
+Selected 10 videos from 66 total
+
+01. game1_set1_29949.mp4 (index: 48)
+02. game1_set1_17291.mp4 (index: 35)
+03. game1_set1_23910.mp4 (index: 58)
+04. game1_set2_88211.mp4 (index: 40)
+05. game1_set2_66610.mp4 (index: 53)
+06. game1_set2_67464.mp4 (index: 23)
+07. game1_set1_25835.mp4 (index: 10)
+08. game1_set1_25401.mp4 (index: 60)
+09. game1_set1_27209.mp4 (index: 22)
+10. game1_set1_42426.mp4 (index: 13)
+
+Diversity Metrics:
+Mean Distance: 0.4142
+Std Distance: 0.0660
+Distance Range: [0.3356, 0.5303]

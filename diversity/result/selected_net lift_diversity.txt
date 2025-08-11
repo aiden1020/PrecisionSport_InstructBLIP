@@ -1,0 +1,18 @@
+Diversity Sampling Results for 'net lift' stroke
+Selected 10 videos from 142 total
+
+01. game1_set1_45350.mp4 (score: 0.0000)
+02. game1_set1_51028.mp4 (score: 90.4375)
+03. game1_set1_23626.mp4 (score: 87.9375)
+04. game1_set2_70463.mp4 (score: 84.1875)
+05. game1_set1_32248.mp4 (score: 84.0000)
+06. game1_set2_66702.mp4 (score: 82.3750)
+07. game1_set2_68120.mp4 (score: 82.0625)
+08. game1_set1_26872.mp4 (score: 80.3125)
+09. game1_set2_73002.mp4 (score: 80.2500)
+10. game1_set1_37751.mp4 (score: 79.6875)
+
+Diversity Metrics:
+Mean Distance: 0.4963
+Std Distance: 0.0439
+Distance Range: [0.4102, 0.5782]

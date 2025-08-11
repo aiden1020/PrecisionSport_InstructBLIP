@@ -1,0 +1,18 @@
+Random Sampling Results for 'net lift' stroke (Control Group)
+Selected 10 videos from 142 total
+
+01. game1_set1_51028.mp4 (index: 137)
+02. game1_set1_43216.mp4 (index: 68)
+03. game1_set2_92163.mp4 (index: 87)
+04. game1_set2_87353.mp4 (index: 28)
+05. game1_set1_60330.mp4 (index: 75)
+06. game1_set2_84617.mp4 (index: 111)
+07. game1_set1_39167.mp4 (index: 40)
+08. game1_set2_91675.mp4 (index: 116)
+09. game1_set2_79575.mp4 (index: 0)
+10. game1_set2_82418.mp4 (index: 67)
+
+Diversity Metrics:
+Mean Distance: 0.4518
+Std Distance: 0.0631
+Distance Range: [0.3546, 0.5764]

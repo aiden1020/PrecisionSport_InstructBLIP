@@ -1,0 +1,14 @@
+#@package _global_
+data:
+  train:
+    dataset_name: custom_dataset_few_shot_train_{shot}_shot
+    root: custom_dataset/videos
+    num_classes: 22
+    label_file: labels/custom_dataset_labels_LLM.csv
+    ann_file: custom_dataset/few_shot_8_train.txt
+  val:
+    dataset_name: custom_dataset_val1
+    root: custom_dataset/videos
+    num_classes: 22
+    label_file: labels/custom_dataset_labels_LLM.csv
+    ann_file: custom_dataset/val.txt

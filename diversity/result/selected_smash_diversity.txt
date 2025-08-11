@@ -1,0 +1,18 @@
+Diversity Sampling Results for 'smash' stroke
+Selected 10 videos from 66 total
+
+01. game1_set1_51493.mp4 (score: 0.0000)
+02. game1_set1_23571.mp4 (score: 87.8125)
+03. game1_set1_46337.mp4 (score: 80.0000)
+04. game1_set1_25835.mp4 (score: 78.2500)
+05. game1_set2_67282.mp4 (score: 76.9375)
+06. game1_set2_67464.mp4 (score: 75.6875)
+07. game1_set1_45175.mp4 (score: 75.3125)
+08. game1_set2_81169.mp4 (score: 75.1875)
+09. game1_set1_43598.mp4 (score: 75.0625)
+10. game1_set2_94335.mp4 (score: 74.8750)
+
+Diversity Metrics:
+Mean Distance: 0.4513
+Std Distance: 0.0564
+Distance Range: [0.3639, 0.5520]
