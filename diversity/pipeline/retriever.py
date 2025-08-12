@@ -9,7 +9,7 @@ import pandas as pd
 import torch.distributed as dist
 
 from lavis.common.registry import registry
-from engines.instructblip_engine import InstructBLIPBadmintonEngine
+from engines.instructblip_engine import InstructBLIPBadmintonVQAEngine
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 def load_json(path: str) -> List[Dict[str, Any]]:
@@ -97,7 +97,7 @@ class StrokeCsvRetriever:
         self.chunk_size = chunk_size
         self.csv_path = csv_path
         self.out_dir = out_dir
-        self.engine = InstructBLIPBadmintonEngine(
+        self.engine = InstructBLIPBadmintonVQAEngine(
             cfg_path=cfg_path,
             device=device,
             amp=amp,
