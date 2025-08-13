@@ -25,23 +25,41 @@ def dump_json(path: str, rows: List[Dict[str, Any]]) -> None:
 def merge_shards(
     in_dir: str,
     out_path: str,
-    prefer: str = "first"  # "first" | "last"
+    world_size: int,                
+    prefer: str = "first"            
 ) -> List[str]:
-    cand = sorted(glob.glob(os.path.join(in_dir, "rank*.json")))
+    cand_all = sorted(glob.glob(os.path.join(in_dir, "rank*.json")))
+    rank_pat = re.compile(r"rank(\d+)\.json$")
+    cand = []
+    skipped = []
+    for p in cand_all:
+        m = rank_pat.search(os.path.basename(p))
+        if not m:
+            skipped.append(p)
+            continue
+        r = int(m.group(1))
+        if 0 <= r < world_size:
+            cand.append(p)
+        else:
+            skipped.append(p)
+
     if not cand:
-        raise FileNotFoundError(f"在 {in_dir} 找不到 rank*.json")
+        raise FileNotFoundError(
+            f"在 {in_dir} 找不到符合本次 world_size={world_size} 的 rank*.json（找到但被過濾的檔案：{len(skipped)}）"
+        )
 
     all_rows: List[Dict[str, Any]] = []
     for p in cand:
-        rows = load_json(p)
-        all_rows.extend(rows)
+        rows = load_json(p)  
+        if isinstance(rows, list):
+            all_rows.extend(rows)
 
     by_idx: Dict[int, Dict[str, Any]] = {}
     for r in all_rows:
         gidx = int(r["global_idx"])
         if gidx in by_idx:
             if prefer == "last":
-                by_idx[gidx] = r
+                by_idx[gidx] = r  
         else:
             by_idx[gidx] = r
 
@@ -49,14 +67,12 @@ def merge_shards(
 
     dump_json(out_path, merged)
 
-    uniq = len(merged)
-    dup = len(all_rows) - uniq
-    
-    all_video_paths = []
+    all_video_paths: List[str] = []
     for row in merged:
         if "video_paths" in row and isinstance(row["video_paths"], list):
             all_video_paths.extend(row["video_paths"])
-    print("Merged")
+
+    print(f"Merged {len(cand)} shard(s) into {out_path}. Skipped {len(skipped)} file(s).")
     return all_video_paths
     
 def extract_ans(text: str) -> Tuple[List[int], str]:
@@ -167,7 +183,8 @@ class StrokeCsvRetriever:
         if is_main_process():
             merged_results = merge_shards(
                 in_dir=self.out_dir,
-                out_path=os.path.join(self.out_dir, "merged_results.json")
+                out_path=os.path.join(self.out_dir, "merged_results.json"),
+                world_size=world_size
             )
 
         if dist.is_available() and dist.is_initialized():
