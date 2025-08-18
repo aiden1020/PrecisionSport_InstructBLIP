@@ -17,7 +17,7 @@ This project introduces a semantic retrieval system for badminton match videos u
 <p align="center">Figure 2. Single-stroke captioning stage to align visual and text features.</p>
 
 #### Captioning Demo
-![Captioning Demo](assets/Captioning_demo.gif)
+![Captioning Demo](assets/Captioning.gif)
 
 ### Stage 2: LLM Fine-tuning
 - **Objective**: Enhance video semantic temporal localization.
