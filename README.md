@@ -16,6 +16,9 @@ This project introduces a semantic retrieval system for badminton match videos u
 ![alt text](assets/sport_ai-Stage1.jpg)
 <p align="center">Figure 2. Single-stroke captioning stage to align visual and text features.</p>
 
+#### Captioning Demo
+![Captioning Demo](assets/Captioning_demo.gif)
+
 ### Stage 2: LLM Fine-tuning
 - **Objective**: Enhance video semantic temporal localization.
 - **Method**: Video QA task to map natural language queries to video events.
@@ -23,6 +26,9 @@ This project introduces a semantic retrieval system for badminton match videos u
 
 ![alt text](assets/sport_ai-Stage2.jpg)
 <p align="center">Figure. 3: Multi-stroke Video QA training for temporal grounding.</p>
+
+#### Temporal Grounding Demo
+![Temporal Grounding Demo](assets/Temporal_Grounding.gif)
 
 ## Content
 
