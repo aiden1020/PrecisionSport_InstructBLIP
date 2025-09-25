@@ -29,8 +29,10 @@ def convert_weights_to_fp16(model: nn.Module):
     model.apply(_convert_weights_to_fp16)
 # def load_tc_clip_model(config_path="tc_clip_encoder/configs", output="lavis/models/tc_clip_encoder/workspace/inference",
 #                         tc_clip_model_path="lavis/models/tc_clip_encoder/weight/fully-supervised-name-class-22-86.pth", precision="fp16"):
+# def load_tc_clip_model(config_path="tc_clip_encoder/configs", output="lavis/models/tc_clip_encoder/workspace/inference",
+#                         tc_clip_model_path="lavis/models/tc_clip_encoder/weight/fully-supervised-LLM-class-22-85.pth", precision="fp16"):
 def load_tc_clip_model(config_path="tc_clip_encoder/configs", output="lavis/models/tc_clip_encoder/workspace/inference",
-                        tc_clip_model_path="lavis/models/tc_clip_encoder/weight/fully-supervised-LLM-class-22-85.pth", precision="fp16"):
+                        tc_clip_model_path="lavis/models/tc_clip_encoder/weight/fully-supervised-combined-22-86.pth", precision="fp16"):
 
     device = torch.device(f"cuda")
     

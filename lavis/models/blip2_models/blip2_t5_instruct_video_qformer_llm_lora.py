@@ -113,7 +113,7 @@ class Blip2T5InstructVideoQformerLLMLoRA(Blip2Base):
         self.t5_tokenizer        = T5TokenizerFast.from_pretrained(t5_model, truncation_side='left')
         self.t5_output_tokenizer = T5TokenizerFast.from_pretrained(t5_model, truncation_side='right')
 
-        special = {"additional_special_tokens": ["<thinking>", "</thinking>", "<answer>", "</answer>"]}
+        special = {"additional_special_tokens": ["<thinking>", "</thinking>", "<answer>", "</answer>","<Video>"]}
         n1 = self.t5_tokenizer.add_special_tokens(special)
         n2 = self.t5_output_tokenizer.add_special_tokens(special)
         
