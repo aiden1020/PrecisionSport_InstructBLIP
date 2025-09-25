@@ -1,0 +1,54 @@
+model:
+  arch: blip2_t5_instruct_video_qformer_llm_lora
+  model_type: flant5xl
+  vit_model: tc_clip
+  load_pretrained: True #pretrain from scratch
+  pretrained: "output/results/badminton_qa_coT_3/badminton_qa_coT_3/20250808144/checkpoint_best.pth"
+
+datasets:
+  badminton_qa:
+    train_samples_portion: all
+    vis_processor:
+      eval:
+        name: "tc_clip_image_eval"
+        image_size: 224
+    text_processor:
+      eval:
+        name: "instruct_blip_question"
+    build_info:
+      # Be careful not to append minus sign (-) before split to avoid itemizing
+      annotations:
+        test:
+          storage: ./configs/datasets/badminton_qa_coT_strategy/input/val.json
+
+      images:
+        storage: ./configs/datasets/badminton_qa/input/images
+        test:
+          storage:  ./configs/datasets/badminton_qa/input/images
+
+run:
+  task: badminton_qa
+  # optimizer
+  lr_sched: "linear_decay_lr"
+  batch_size_train: 6
+  batch_size_eval: 6
+  num_workers: 4
+
+  max_len: 300
+  min_len: 30
+  num_beams: 5
+  # inference-specific
+  inference_method: "rank"
+
+  seed: 42
+  output_dir: "output/results/eval/badminton_qa"
+
+  amp: True
+
+  evaluate: True
+  test_splits: ["test"]
+
+  device: "cuda"
+  world_size: 1
+  dist_url: "env://"
+  distributed: True
