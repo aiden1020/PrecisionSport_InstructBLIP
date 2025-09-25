@@ -8,7 +8,15 @@
 import logging
 import json
 import os
+import re
+import statistics
+from collections import OrderedDict, defaultdict
+
 import torch
+import numpy as np
+import pandas as pd
+from rouge_score import rouge_scorer
+
 import lavis.common.dist_utils as dist_utils
 from lavis.common.registry import registry
 from lavis.common.vqa_tools.vqa import VQA
@@ -16,10 +24,6 @@ from lavis.common.vqa_tools.vqa_vizwiz import VQA_Vizwiz
 from lavis.common.vqa_tools.vqa_eval import VQAEval
 from lavis.common.vqa_tools.vqa_eval_vizwiz import VQAEval_Vizwiz
 from lavis.tasks.base_task import BaseTask
-import numpy as np
-import re
-import pandas as pd
-import statistics
 
 @registry.register_task("vqa")
 class VQATask(BaseTask):
@@ -437,44 +441,24 @@ class ScienceQATask(VQATask):
 #     def build_datasets(self, cfg):
 #         return super().build_datasets(cfg)
 
-#     # def valid_step(self, model, samples):
-#     #     predictions = model.predict_answers(
-#     #         samples=samples,
-#     #         num_beams=self.num_beams,
-#     #         inference_method="generate",
-#     #         max_len=self.max_len,
-#     #         min_len=self.min_len,
-#     #         prompt=self.prompt,
-#     #     )
+#     @staticmethod
+#     def extract_ans(text: str) -> list[int]:
+#         import re
 
-#     #     results = []
-#     #     qids = samples["question_id"]
-#     #     gts  = samples["answer"]
-#     #     for pred, qid, gt in zip(predictions, qids, gts):
-#     #         results.append({
-#     #             "question_id": qid,
-#     #             "pred_ans":    pred.strip(),
-#     #             "gt_ans":      gt.strip(),
-#     #         })
-#     #     return results
+#         # 1) <answer>…</answer>
+#         if m := re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL | re.IGNORECASE):
+#             return [int(n) for n in re.findall(r"\d+", m.group(1))]
 
-#     def extract_ans(text: str) -> str:
-#         """
-#         從帶 CoT 的文字中抽出最終 '<answer>…</answer>' 或標準句型，
-#         若都不符合則回傳空字串。
-#         """
-#         # 1. 優先取 <answer>…</answer>
-#         m = re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL)
-#         if m:
-#             return m.group(1).strip()
-#         # 2. 嘗試取標準句型
-#         m2 = re.search(r"The event happens at strokes? ([\d,]+)", text)
-#         if m2:
-#             nums   = m2.group(1)
-#             s_or_p = "strokes" if "," in nums else "stroke"
-#             return f"The event happens at {s_or_p} {nums}"
-#         # 3. 都不符就回空
-#         return ""
+#         # 2) 標準句型
+#         if m2 := re.search(r"The event happens at strokes?\s*([0-9,\sand]+)", text, flags=re.IGNORECASE):
+#             return [int(n) for n in re.findall(r"\d+", m2.group(1))]
+
+#         # 3) 溫和 fallback（如存在 "Final answer:" / "Answer:" / "答案:"）
+#         if m3 := re.search(r"(?:Final answer|Answer|答案)[:：]\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE):
+#             return [int(n) for n in re.findall(r"\d+", m3.group(1))]
+
+#         return []
+
 
 #     def valid_step(self, model, samples):
 #         predictions = model.predict_answers(
@@ -489,24 +473,26 @@ class ScienceQATask(VQATask):
 #         results = []
 #         qids = samples["question_id"]
 #         gts  = samples["answer"]
-#         for pred, qid, gt in zip(predictions, qids, gts):
+#         qtype = samples["question_type"]
+#         for pred, qid, gt, qt in zip(predictions, qids, gts, qtype):
 #             full_pred = pred.strip()
 #             full_gt   = gt.strip()
 
-#             # 抽出預測與標準的純答案
-#             pred_ans = extract_ans(full_pred)
-#             gt_ans   = extract_ans(full_gt)
+#             # 直接從 CoT 中抽出數字列表
+#             pred_list = self.extract_ans(full_pred)
+#             gt_list   = self.extract_ans(full_gt)
 
 #             results.append({
 #                 "question_id": qid,
 #                 "raw_pred":    full_pred,
 #                 "raw_gt":      full_gt,
-#                 "pred_ans":    pred_ans,
-#                 "gt_ans":      gt_ans,
+#                 "pred_list":   pred_list,
+#                 "question_type": qt,
+#                 "gt_list":     gt_list,
 #             })
 #         return results
 
-#     def after_evaluation(self, val_result, split_name,epoch, **kwargs):
+#     def after_evaluation(self, val_result, split_name, epoch, **kwargs):
 #         result_file = self.save_result(
 #             val_result,
 #             result_dir=registry.get_path("result_dir"),
@@ -520,90 +506,63 @@ class ScienceQATask(VQATask):
 
 #     @dist_utils.main_process
 #     def _report_metrics(self, result_file, split):
+#         # 讀取結果
 #         with open(result_file, "r", encoding="utf-8") as f:
 #             records = json.load(f)
 
-#         # step 1: 提取 pred_list 和 gt_list
-#         def extract_numbers_per_entry(data):
-#             pattern = re.compile(r'\b\d+\b')
-#             results = []
+#         # 分成可回答與不可能題
+#         answerable = [r for r in records if r["gt_list"]]
+#         impossible  = [r for r in records if not r["gt_list"]]
 
-#             for entry in data:
-#                 pred_numbers = list(set(map(int, pattern.findall(entry.get("pred_ans", "")))))
-#                 gt_numbers = list(set(map(int, pattern.findall(entry.get("gt_ans", "")))))
-#                 results.append({
-#                     "question_id": entry["question_id"],
-#                     "pred_list": sorted(pred_numbers),
-#                     "gt_list": sorted(gt_numbers)
-#                 })
+#         # 可回答題指標
+#         hit1_count = 0
+#         exact_match_count = 0
+#         precisions = []
+#         recalls = []
+#         f1s = []
 
-#             return results
+#         for r in answerable:
+#             pred_set = set(r["pred_list"])
+#             gt_set   = set(r["gt_list"])
+#             # Hit@1
+#             if r["pred_list"] and r["pred_list"][0] in gt_set:
+#                 hit1_count += 1
+#             # Exact Match
+#             if pred_set == gt_set:
+#                 exact_match_count += 1
+#             # Precision
+#             precision = len(pred_set & gt_set) / len(pred_set) if r["pred_list"] else 0.0
+#             # Recall
+#             recall = len(pred_set & gt_set) / len(gt_set)
+#             # F1
+#             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
-#         # step 2: 計算指標
-#         def evaluate_predictions(df, hit_k=1):
-#             hit1_count = 0
-#             exact_match_count = 0
-#             all_precisions = []
-#             all_recalls = []
-#             all_f1s = []
+#             precisions.append(precision)
+#             recalls.append(recall)
+#             f1s.append(f1)
 
-#             for _, row in df.iterrows():
-#                 pred = row["pred_list"]
-#                 gt = row["gt_list"]
+#         total_ans = len(answerable)
+#         metrics_ans = {
+#             "hit@1":       hit1_count / total_ans * 100 if total_ans else 0.0,
+#             "exact_match": exact_match_count / total_ans * 100 if total_ans else 0.0,
+#             "precision":   statistics.mean(precisions) * 100 if precisions else 0.0,
+#             "recall":      statistics.mean(recalls)    * 100 if recalls    else 0.0,
+#             "f1":          statistics.mean(f1s)        * 100 if f1s        else 0.0
+#         }
 
-#                 pred_set = set(pred)
-#                 gt_set = set(gt)
+#         # 不可能題指標
+#         impossible_correct = sum(1 for r in impossible if not r["pred_list"])
+#         total_imp = len(impossible)
+#         metrics_imp = {
+#             "impossible_accuracy": impossible_correct / total_imp * 100 if total_imp else 0.0
+#         }
 
-#                 # Hit@1: 第一個預測是否在 GT 裡
-#                 if pred and pred[0] in gt_set:
-#                     hit1_count += 1
-
-#                 # Exact Match
-#                 if pred_set == gt_set:
-#                     exact_match_count += 1
-
-#                 # Precision / Recall / F1
-#                 if pred_set:
-#                     precision = len(pred_set & gt_set) / len(pred_set)
-#                 else:
-#                     precision = 1.0 if not gt_set else 0.0
-
-#                 if gt_set:
-#                     recall = len(pred_set & gt_set) / len(gt_set)
-#                 else:
-#                     recall = 1.0 if not pred_set else 0.0
-
-#                 if precision + recall > 0:
-#                     f1 = 2 * precision * recall / (precision + recall)
-#                 else:
-#                     f1 = 0.0
-
-#                 all_precisions.append(precision)
-#                 all_recalls.append(recall)
-#                 all_f1s.append(f1)
-
-#             total = len(df)
-#             if total == 0:
-#                 return {
-#                     "hit@1": 0.0,
-#                     "exact_match": 0.0,
-#                     "f1": 0.0,
-#                     "agg_metrics": 0.0,
-#                 }
-
-#             return {
-#                 "hit@1": float(hit1_count / total * 100),
-#                 "exact_match": float(exact_match_count / total * 100),
-#                 "precision": float(np.mean(all_precisions) * 100),
-#                 "recall": float(np.mean(all_recalls) * 100),
-#                 "f1": float(np.mean(all_f1s) * 100),
-#                 "agg_metrics": float(np.mean(all_f1s) * 100),
-#             }
-
-#         # 執行提取與評估
-#         processed = extract_numbers_per_entry(records)
-#         df = pd.DataFrame(processed)
-#         metrics = evaluate_predictions(df)
+#                 # 合併報表，並加入 agg_metrics (使用 f1 作為聚合指標)
+#         metrics = {
+#             **metrics_ans,
+#             **metrics_imp,
+#             "agg_metrics": metrics_ans["f1"]
+#         }
 
 #         # Logging
 #         log_path = os.path.join(registry.get_path("output_dir"), "log.txt")
@@ -615,34 +574,42 @@ class ScienceQATask(VQATask):
 @registry.register_task("badminton_qa")
 class BadmintonQATask(VQATask):
     """
-    Task for chunk-based badminton QA using predict_answers.
-    Eval metrics: Hit@1, Exact Match, token-level F1.
+    Task for chunk-based badminton QA, supporting multiple sub-tasks:
+    - temporal_grounding: Locate event strokes. (Metrics: Hit@1, EM, F1)
+    - action_classification: Classify a stroke. (Metrics: Exact Match)
+    - action_count: Count occurrences of an action. (Metrics: Exact Match)
+    - summarisation: Summarize tactics. (Metrics: ROUGE-L)
     """
 
-    def build_datasets(self, cfg):
-        return super().build_datasets(cfg)
+    # --- 答案抽取邏輯 (按任務類型拆分) ---
 
     @staticmethod
-    def extract_ans(text: str) -> list[int]:
-        """
-        從帶 CoT 的文字中抽出最終答案的數字列表；
-        若檢測到 <answer>…</answer> 或標準句型，回傳其中的整數；
-        否則回傳空 list。
-        """
-        # 1. 優先取 <answer>…</answer> 裡的數字
-        m = re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL)
-        if m:
-            nums = re.findall(r"\b\d+\b", m.group(1))
-            return list(map(int, nums))
+    def _extract_answer(text: str, task: str):
+        """通用答案抽取器，根據任務類型調用特定函式。"""
+        # 1. 先從 <answer>...</answer> 標籤中提取核心內容
+        if m := re.search(r"<answer>(.*?)</answer>", text, flags=re.DOTALL | re.IGNORECASE):
+            content = m.group(1).strip()
+        else:
+            # 如果沒有 <answer> 標籤，嘗試溫和的 fallback
+            if m3 := re.search(r"(?:Final answer|Answer|答案)[:：]\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE):
+                content = m3.group(1).strip()
+            else:
+                # 都沒有就返回原始文本
+                content = text.strip()
 
-        # 2. 嘗試取標準句型裡的數字
-        m2 = re.search(r"The event happens at strokes? ([\d,]+)", text)
-        if m2:
-            nums = m2.group(1).split(",")
-            return [int(n) for n in nums]
-
-        # 3. 都不符合就回空
-        return []
+        # 2. 根據任務類型進行二次處理
+        if task == "temporal_grounding":
+            return [int(n) for n in re.findall(r"\d+", content)]
+        elif task == "action_count":
+            # 找到答案中的第一個數字
+            numbers = re.findall(r"\d+", content)
+            return int(numbers[0]) if numbers else None # 如果找不到數字則返回 None
+        elif task in ["action_classification", "summarisation"]:
+            # 對於文字類任務，進行標準化 (小寫、去標點) 以利比較
+            return re.sub(r'[^\w\s]', '', content).lower()
+        else:
+            # 未知任務類型，直接返回內容
+            return content
 
     def valid_step(self, model, samples):
         predictions = model.predict_answers(
@@ -655,22 +622,20 @@ class BadmintonQATask(VQATask):
         )
 
         results = []
-        qids = samples["question_id"]
-        gts  = samples["answer"]
-        for pred, qid, gt in zip(predictions, qids, gts):
-            full_pred = pred.strip()
-            full_gt   = gt.strip()
-
-            # 直接從 CoT 中抽出數字列表
-            pred_list = self.extract_ans(full_pred)
-            gt_list   = self.extract_ans(full_gt)
+        for i in range(len(predictions)):
+            task = samples["task"][i]
+            
+            # 根據任務類型抽取答案
+            pred_extracted = self._extract_answer(predictions[i], task)
+            gt_extracted = self._extract_answer(samples["answer"][i], task)
 
             results.append({
-                "question_id": qid,
-                "raw_pred":    full_pred,
-                "raw_gt":      full_gt,
-                "pred_list":   pred_list,
-                "gt_list":     gt_list,
+                "question_id":   samples["question_id"][i],
+                "task":          task,
+                "raw_pred":      predictions[i].strip(),
+                "raw_gt":        samples["answer"][i].strip(),
+                "pred_extracted": pred_extracted,
+                "gt_extracted":   gt_extracted,
             })
         return results
 
@@ -679,79 +644,124 @@ class BadmintonQATask(VQATask):
             val_result,
             result_dir=registry.get_path("result_dir"),
             filename=f"{split_name}_badminton_qa_result_epoch{epoch}",
-            remove_duplicate=""
+            remove_duplicate="question_id" # 使用 question_id 去重
         )
         metrics = None
-        if split_name == 'val':
-            metrics = self._report_metrics(result_file=result_file, split=split_name)
+        # if split_name == 'val': # 移除此條件，使其在 test split 也能計算指標
+        metrics = self._report_metrics(result_file=result_file, split=split_name)
         return metrics
 
     @dist_utils.main_process
     def _report_metrics(self, result_file, split):
-        # 讀取結果
         with open(result_file, "r", encoding="utf-8") as f:
             records = json.load(f)
 
-        # 分成可回答與不可能題
-        answerable = [r for r in records if r["gt_list"]]
-        impossible  = [r for r in records if not r["gt_list"]]
+        # 按任務類型對結果進行分組
+        results_by_task = defaultdict(list)
+        for r in records:
+            results_by_task[r['task']].append(r)
 
-        # 可回答題指標
-        hit1_count = 0
-        exact_match_count = 0
-        precisions = []
-        recalls = []
-        f1s = []
+        all_metrics = {}
+        agg_metrics_list = []
+
+        # --- 分別計算各任務的指標 ---
+
+        # 1. Temporal Grounding
+        if "temporal_grounding" in results_by_task:
+            metrics_tg = self._report_temporal_grounding(results_by_task["temporal_grounding"])
+            all_metrics["temporal_grounding"] = metrics_tg
+            agg_metrics_list.append(metrics_tg.get("f1", 0))
+
+        # 2. Action Classification
+        if "action_classification" in results_by_task:
+            metrics_ac = self._report_exact_match(results_by_task["action_classification"])
+            all_metrics["action_classification"] = metrics_ac
+            agg_metrics_list.append(metrics_ac.get("exact_match", 0))
+
+        # 3. Action Count
+        if "action_count" in results_by_task:
+            metrics_cnt = self._report_exact_match(results_by_task["action_count"])
+            all_metrics["action_count"] = metrics_cnt
+            agg_metrics_list.append(metrics_cnt.get("exact_match", 0))
+            
+        # 4. Summarisation
+        if "summarisation" in results_by_task:
+            metrics_sum = self._report_summarisation(results_by_task["summarisation"])
+            all_metrics["summarisation"] = metrics_sum
+            agg_metrics_list.append(metrics_sum.get("rougeL", 0))
+
+        # 計算聚合指標
+        all_metrics["agg_metrics"] = statistics.mean(agg_metrics_list) if agg_metrics_list else 0.0
+
+        log_path = os.path.join(registry.get_path("output_dir"), "log.txt")
+        with open(log_path, "a") as f:
+            f.write(json.dumps({f"{split}_epoch_metrics": all_metrics}) + "\n")
+        logging.info(f"[BadmintonQA] {split} metrics: {json.dumps(all_metrics, indent=2)}")
+
+        return all_metrics
+
+    # --- 各任務指標計算的輔助函式 ---
+
+    def _report_temporal_grounding(self, records):
+        """計算 Temporal Grounding 任務的指標 (Hit@1, EM, P, R, F1)。"""
+        hit1_count, exact_match_count = 0, 0
+        precisions, recalls, f1s = [], [], []
+
+        answerable = [r for r in records if r["gt_extracted"]]
+        impossible = [r for r in records if not r["gt_extracted"]]
 
         for r in answerable:
-            pred_set = set(r["pred_list"])
-            gt_set   = set(r["gt_list"])
-            # Hit@1
-            if r["pred_list"] and r["pred_list"][0] in gt_set:
+            pred_set = set(r["pred_extracted"])
+            gt_set   = set(r["gt_extracted"])
+
+            if r["pred_extracted"] and r["pred_extracted"][0] in gt_set:
                 hit1_count += 1
-            # Exact Match
             if pred_set == gt_set:
                 exact_match_count += 1
-            # Precision
-            precision = len(pred_set & gt_set) / len(pred_set) if r["pred_list"] else 0.0
-            # Recall
-            recall = len(pred_set & gt_set) / len(gt_set)
-            # F1
+            
+            precision = len(pred_set & gt_set) / len(pred_set) if pred_set else 0.0
+            recall = len(pred_set & gt_set) / len(gt_set) if gt_set else 0.0
             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
             precisions.append(precision)
             recalls.append(recall)
             f1s.append(f1)
 
         total_ans = len(answerable)
-        metrics_ans = {
-            "hit@1":       hit1_count / total_ans * 100 if total_ans else 0.0,
-            "exact_match": exact_match_count / total_ans * 100 if total_ans else 0.0,
-            "precision":   statistics.mean(precisions) * 100 if precisions else 0.0,
-            "recall":      statistics.mean(recalls)    * 100 if recalls    else 0.0,
-            "f1":          statistics.mean(f1s)        * 100 if f1s        else 0.0
-        }
-
-        # 不可能題指標
-        impossible_correct = sum(1 for r in impossible if not r["pred_list"])
-        total_imp = len(impossible)
-        metrics_imp = {
-            "impossible_accuracy": impossible_correct / total_imp * 100 if total_imp else 0.0
-        }
-
-                # 合併報表，並加入 agg_metrics (使用 f1 作為聚合指標)
         metrics = {
-            **metrics_ans,
-            **metrics_imp,
-            "agg_metrics": metrics_ans["f1"]
+            "hit@1": hit1_count / total_ans * 100 if total_ans else 0.0,
+            "exact_match": exact_match_count / total_ans * 100 if total_ans else 0.0,
+            "precision": statistics.mean(precisions) * 100 if precisions else 0.0,
+            "recall": statistics.mean(recalls) * 100 if recalls else 0.0,
+            "f1": statistics.mean(f1s) * 100 if f1s else 0.0
         }
-
-        # Logging
-        log_path = os.path.join(registry.get_path("output_dir"), "log.txt")
-        with open(log_path, "a") as f:
-            f.write(json.dumps(metrics) + "\n")
-        logging.info(f"[BadmintonQA] {split} metrics: {metrics}")
+        
+        # 不可能題指標
+        impossible_correct = sum(1 for r in impossible if not r["pred_extracted"])
+        total_imp = len(impossible)
+        metrics["impossible_accuracy"] = impossible_correct / total_imp * 100 if total_imp else 0.0
         return metrics
+
+    def _report_exact_match(self, records):
+        """計算需要完全匹配的任務指標 (Action Classification, Action Count)。"""
+        if not records: return {"exact_match": 0.0}
+        
+        correct_count = sum(1 for r in records if r["pred_extracted"] == r["gt_extracted"])
+        return {"exact_match": correct_count / len(records) * 100}
+
+    def _report_summarisation(self, records):
+        """計算 Summarisation 任務的指標 (ROUGE-L)。"""
+        if not records: return {"rougeL": 0.0}
+        
+        scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+        scores = []
+        for r in records:
+            # 確保 pred 和 gt 都是字串
+            pred_text = str(r.get("pred_extracted", ""))
+            gt_text = str(r.get("gt_extracted", ""))
+            score = scorer.score(gt_text, pred_text)
+            scores.append(score['rougeL'].fmeasure)
+        
+        return {"rougeL": statistics.mean(scores) * 100 if scores else 0.0}
 
 
 @registry.register_task("vizwiz")
