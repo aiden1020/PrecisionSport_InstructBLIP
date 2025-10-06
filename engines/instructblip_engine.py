@@ -9,14 +9,45 @@ import lavis.tasks as tasks
 from lavis.common.dist_utils import init_distributed_mode
 from lavis.common.registry import registry
 
-INSTRUCTION = (
-    "<Video> This video has {n} strokes. "
-    "You must answer based only on the strokes you see—do not invent or hallucinate any events. "
-    "Let's think step by step. "
-    "If the event occurs, output exactly “The event happens at strokes i,j,…” to list the stroke indices"
-    "If the event does not occur, output exactly “The event does not occur”"
-)
+
 class InstructBLIPBadmintonVQAEngine:
+    
+    GENERAL_FORMATTING_GUIDANCE = (
+        "Let's think step by step. First, provide your reasoning within `<thinking>` tags. "
+        "Then, provide the final answer within `<answer>` tags."
+    )
+    MULTI_TASK_INSTRUCTIONS = {
+        "temporal_grounding": (
+            "<Video> This video has {n} strokes. "
+            "Your task is to identify the exact strokes where a specific event occurs. "
+            f"{GENERAL_FORMATTING_GUIDANCE} "
+            "If the event occurs, your answer must be in the format: `The event happens at strokes i,j,…`. "
+            "If the event does not occur, your answer must be: `The event does not occur`."
+        ),
+        "action_classification": (
+            "<Video> This video has {n} strokes. "
+            "Your task is to classify a specific action based on visual evidence. "
+            f"{GENERAL_FORMATTING_GUIDANCE} "
+            "Your final answer should be a concise sentence describing the identified action."
+        ),
+        "action_count": (
+            "<Video> This video has {n} strokes. "
+            "Your task is to count the total number of times a specific action occurs. "
+            f"{GENERAL_FORMATTING_GUIDANCE} "
+            "Your final answer should be a sentence stating the total count, for example: `The player performed 3 smashes.`"
+        ),
+        "summarisation": (
+            "<Video> This video has {n} strokes. "
+            "Your task is to summarize the tactical patterns and objectives based on the sequence of shots. "
+            f"{GENERAL_FORMATTING_GUIDANCE} "
+            "Your final answer should be a concise paragraph summarizing the strategy."
+        ),
+        "default": ( # Fallback instruction
+            "<Video> This video has {n} strokes. Please answer the following question based on the video. "
+            f"{GENERAL_FORMATTING_GUIDANCE}"
+        )
+    }
+
     def __init__(
         self,
         cfg_path: str = "lavis/projects/instructblip/inference/inference_instructblip_badminton_qa_coT_3.yaml",
@@ -83,10 +114,9 @@ class InstructBLIPBadmintonVQAEngine:
                 self._clip_cache.popitem(last=False)
         return clip_tensor
 
-    def _build_samples(self, items: List[List[str]], question: str):
+    def _build_samples(self, items: List[List[str]], question: str, task_id: str):
         per_sample_clips = []
         text_inputs, qformer_instructions = [], []
-
         for clip_paths in items:
             clip_tensors = [self._get_clip_tensor(p) for p in clip_paths]
             T, C, H, W = clip_tensors[0].shape
@@ -98,12 +128,16 @@ class InstructBLIPBadmintonVQAEngine:
             per_sample_clips.append(torch.stack(clip_tensors, dim=0).cpu())
 
             n = len(clip_paths)
-            processed_q = self.text_processor(f"{INSTRUCTION.format(n=n)} Question: {question} Answer:")
+            
+            instruction_template = self.MULTI_TASK_INSTRUCTIONS.get(task_id, self.MULTI_TASK_INSTRUCTIONS["default"])
+            instruction = instruction_template.format(n=n)
+            
+            processed_q = self.text_processor(f"{instruction} Question: {question} Answer:")
             text_inputs.append(processed_q)
             qformer_instructions.append(self.qformer_instruction_proc)
 
         ks = [x.size(0) for x in per_sample_clips]
-        K_max = max(ks)
+        K_max = max(ks) if ks else 0
 
         padded, clip_masks = [], []
         for img, k_i in zip(per_sample_clips, ks):
@@ -115,21 +149,22 @@ class InstructBLIPBadmintonVQAEngine:
                 pad = torch.zeros((K_max - k_i, T, C, H, W), dtype=img.dtype)
                 img = torch.cat([img, pad], dim=0)
             padded.append(img)
-
-        batch_images = torch.stack(padded, dim=0).to(self.device, non_blocking=True)
-        clip_mask = torch.stack(clip_masks, dim=0).to(self.device, non_blocking=True)
+        
+        batch_images = torch.stack(padded, dim=0).to(self.device, non_blocking=True) if padded else torch.empty(0).to(self.device)
+        clip_mask = torch.stack(clip_masks, dim=0).to(self.device, non_blocking=True) if clip_masks else torch.empty(0).to(self.device)
 
         samples = {
-            "images": batch_images,               # [B,K,T,C,H,W]
-            "clip_mask": clip_mask,              # [B,K]  
+            "images": batch_images,
+            "clip_mask": clip_mask,
             "text_input": text_inputs,      
             "Qformer_instruction": qformer_instructions,
         }
         return samples
 
     @torch.no_grad()
-    def predict(self, items: List[List[str]], question: str):
-        samples = self._build_samples(items, question)
+    def predict(self, items: List[List[str]], question: str, task_id="temporal_grounding"):
+        samples = self._build_samples(items, question, task_id)
+        
         autocast_ctx = (
             torch.autocast(device_type="cuda", dtype=self.dtype)
             if self.amp else torch.cuda.amp.autocast(enabled=False)
@@ -137,6 +172,7 @@ class InstructBLIPBadmintonVQAEngine:
         with torch.inference_mode(), autocast_ctx:
             outputs = self.model.predict_answers(samples, **self.gen_params)
         return outputs, samples
+
 
 
 class InstructBLIPBadmintonCaptioningEngine:
@@ -178,9 +214,6 @@ class InstructBLIPBadmintonCaptioningEngine:
 
     @torch.no_grad()
     def generate_one(self, video_path: str, prompt: Optional[str] = None) -> str:
-        """
-        產生單支影片的 caption。
-        """
         clip = self._encode_video(video_path)
         batch = self._to_device(clip.unsqueeze(0))  # [1,T,C,H,W]
 
@@ -222,14 +255,3 @@ class InstructBLIPBadmintonCaptioningEngine:
                 num_beams=self.num_beams,
             )
         return list(captions)
-
-    def close(self, empty_cuda_cache: bool = True):
-        try:
-            self.model.to("cpu")
-        except Exception:
-            pass
-        del self.model
-        import gc
-        gc.collect()
-        if empty_cuda_cache and torch.cuda.is_available():
-            torch.cuda.empty_cache()
